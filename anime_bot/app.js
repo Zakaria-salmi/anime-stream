@@ -1,5 +1,5 @@
 const puppeteer = require("puppeteer");
-const fs = require("fs");
+const fs = require("fs").promises;
 const path = require("path");
 
 async function launchBrowser() {
@@ -66,30 +66,29 @@ async function fetchAnimes(page) {
 async function checkSeasons(browser, anime) {
     let season = 1;
     let pageExists = true;
+    let allSeasons = {};
 
     while (pageExists) {
         const seasonUrl = `${anime.link}/saison${season}/vostfr`;
-        console.log(`Checking URL: ${seasonUrl}`);
+        console.log(`Vérification de l'URL : ${seasonUrl}`);
 
         try {
             const newPage = await browser.newPage();
             const response = await newPage.goto(seasonUrl, {
-                waitUntil: "networkidle0",
+                waitUntil: "domcontentloaded",
             });
 
             if (response.status() === 404) {
-                console.log(`Season ${season} does not exist for this anime.`);
+                console.log(`La saison ${season} n'existe pas pour cet anime.`);
                 pageExists = false;
             } else {
                 const errorMsg = await newPage.$("#msgErrorEp");
                 if (errorMsg && (await errorMsg.isVisible())) {
-                    console.log(
-                        `Error message #msgErrorEp is present and visible for season ${season}. Moving to next anime.`
-                    );
+                    console.log(`Passage à l'anime suivant.`);
                     pageExists = false;
                 } else {
                     console.log(
-                        `Fetching episodes for season ${season} for ${anime.name}`
+                        `Récupération des épisodes pour la saison ${season} de ${anime.name}`
                     );
                     const episodes = await newPage.evaluate(() => {
                         const episodeSelect =
@@ -152,24 +151,71 @@ async function checkSeasons(browser, anime) {
                         return results;
                     });
 
-                    console.log(
-                        `Season ${season} - Episodes fetched:`,
-                        episodes
-                    );
+                    allSeasons[season] = episodes;
                     season++;
                 }
             }
 
             await newPage.close();
         } catch (error) {
-            console.error(`Error while checking URL ${seasonUrl}:`, error);
+            console.error(
+                `Erreur lors de la vérification de l'URL ${seasonUrl}:`,
+                error
+            );
             pageExists = false;
         }
 
         await delay(500);
     }
 
-    return season;
+    const data = {
+        anime: anime.name,
+        img: anime.img,
+        seasons: allSeasons,
+    };
+
+    await writeToJson(data, "animes.json");
+
+    return season - 1;
+}
+
+async function writeToJson(data, filename) {
+    try {
+        let existingData = [];
+        try {
+            const fileContent = await fs.readFile(filename, "utf8");
+            existingData = JSON.parse(fileContent);
+        } catch (error) {
+            console.log(
+                `Le fichier ${filename} n'existe pas encore ou est vide. Création d'un nouveau fichier.`
+            );
+        }
+
+        if (!Array.isArray(existingData)) {
+            existingData = [];
+            console.log(
+                `Le contenu de ${filename} n'est pas un tableau. Initialisation d'un nouveau tableau.`
+            );
+        }
+
+        const animeIndex = existingData.findIndex(
+            (anime) => anime.anime === data.anime
+        );
+        if (animeIndex !== -1) {
+            existingData[animeIndex] = data;
+        } else {
+            existingData.push(data);
+        }
+
+        const jsonData = JSON.stringify(existingData, null, 2);
+        await fs.writeFile(filename, jsonData, "utf8");
+        console.log(`Les données ont été écrites avec succès dans ${filename}`);
+    } catch (error) {
+        console.error(
+            `Erreur lors de l'écriture dans le fichier ${filename}:`,
+            error
+        );
+    }
 }
 
 async function scrapeAnime() {
@@ -181,13 +227,23 @@ async function scrapeAnime() {
         await applyFilters(page);
 
         const animes = await fetchAnimes(page);
+        let animeCount = 0;
 
-        for (const anime of animes) {
+        for (let i = 0; i < 2; i++) {
+            const anime = animes[i];
             const seasonCount = await checkSeasons(browser, anime);
-            console.log(
-                `The anime ${anime.link} has ${seasonCount} season(s).`
-            );
+
+            animeCount++;
         }
+
+        // for (const anime of animes) {
+        //     const seasonCount = await checkSeasons(browser, anime);
+        //     console.log(
+        //         `The anime ${anime.link} has ${seasonCount} season(s).`
+        //     );
+        // }
+
+        console.log("scraped finished, anime count : ", animeCount);
 
         await page.close();
         await browser.close();
