@@ -5,19 +5,17 @@ const cliProgress = require("cli-progress");
 
 async function launchBrowser() {
     const browser = await puppeteer.launch({
-        headless: "new",
+        headless: true,
         args: [
             "--no-sandbox",
             "--disable-setuid-sandbox",
             "--disable-dev-shm-usage",
-            "--disable-accelerated-2d-canvas",
-            "--no-first-run",
-            "--no-zygote",
             "--disable-gpu",
         ],
         defaultViewport: null,
     });
     const page = await browser.newPage();
+
     return { browser, page };
 }
 
@@ -82,16 +80,13 @@ async function checkSeasons(browser, anime) {
 
     while (pageExists) {
         const seasonUrl = `${anime.link}/saison${season}/vostfr`;
-        console.log(`Vérification de l'URL : ${seasonUrl}`);
+        console.log(` Vérification de l'URL : ${seasonUrl}`);
 
         try {
             const newPage = await browser.newPage();
-            const response = await newPage.goto(seasonUrl, {
-                waitUntil: "domcontentloaded",
-            });
+            const response = await newPage.goto(seasonUrl);
 
             if (response.status() === 404) {
-                console.log(`La saison ${season} n'existe pas pour cet anime.`);
                 pageExists = false;
             } else {
                 const errorMsg = await newPage.$("#msgErrorEp");
@@ -165,10 +160,14 @@ async function checkSeasons(browser, anime) {
 
                     allSeasons[season] = episodes;
                     season++;
+
+                    if (global.gc) {
+                        global.gc();
+                    }
                 }
             }
 
-            await newPage.close();
+            await newPage.close(); // Fermer la page après utilisation
         } catch (error) {
             console.error(
                 `Erreur lors de la vérification de l'URL ${seasonUrl}:`,
@@ -176,8 +175,6 @@ async function checkSeasons(browser, anime) {
             );
             pageExists = false;
         }
-
-        await delay(500);
     }
 
     const data = {
@@ -206,9 +203,6 @@ async function writeToJson(data, filename) {
 
         if (!Array.isArray(existingData)) {
             existingData = [];
-            console.log(
-                `Le contenu de ${filename} n'est pas un tableau. Initialisation d'un nouveau tableau.`
-            );
         }
 
         const animeIndex = existingData.findIndex(
@@ -222,7 +216,6 @@ async function writeToJson(data, filename) {
 
         const jsonData = JSON.stringify(existingData, null, 2);
         await fs.writeFile(filename, jsonData, "utf8");
-        console.log(`Les données ont été écrites avec succès dans ${filename}`);
     } catch (error) {
         console.error(
             `Erreur lors de l'écriture dans le fichier ${filename}:`,
@@ -232,11 +225,15 @@ async function writeToJson(data, filename) {
 }
 
 async function scrapeAnime() {
+    let browser;
     try {
-        console.clear(); // Nettoie la console avant de commencer
+        console.clear();
 
-        const { browser, page } = await launchBrowser();
-        await page.goto("https://anime-sama.fr/catalogue/");
+        const { browser: newBrowser, page } = await launchBrowser();
+        browser = newBrowser;
+        await page.goto("https://anime-sama.fr/catalogue/", {
+            waitUntil: "networkidle2",
+        });
         await delay(500);
 
         await handleCookieBanner(page);
@@ -245,51 +242,51 @@ async function scrapeAnime() {
         const animes = await fetchAnimes(page);
         console.log("Nombre d'animes : ", animes.length);
 
-        // Créer une nouvelle barre de progression
         const progressBar = new cliProgress.SingleBar(
             {},
             cliProgress.Presets.shades_classic
         );
-
-        // Démarrer la barre de progression
         progressBar.start(animes.length, 0);
 
-        let animeCount = 0;
-
-        for (const anime of animes) {
-            try {
-                const seasonCount = await checkSeasons(browser, anime);
-                animeCount++;
-
-                // Mettre à jour la barre de progression
-                progressBar.update(animeCount);
-
-                // Afficher les informations sur une nouvelle ligne
-                console.log(
-                    `\nL'anime ${anime.name} a ${seasonCount} saison(s).`
-                );
-            } catch (error) {
-                console.error(
-                    `\nErreur lors du scraping de ${anime.name}:`,
-                    error
-                );
-            }
+        const batchSize = 50; // Nombre d'animes à traiter par lot
+        for (let i = 0; i < animes.length; i += batchSize) {
+            const batch = animes.slice(i, i + batchSize);
+            await processBatch(batch, browser, progressBar);
         }
 
-        // Arrêter la barre de progression
         progressBar.stop();
-
         console.log(
-            "\nScraping terminé, nombre d'animes traités : ",
-            animeCount
+            "\n Scraping terminé, nombre d'animes traités : ",
+            animes.length
         );
 
         await page.close();
-        await browser.close();
     } catch (error) {
         console.error("Erreur pendant le scraping:", error);
     } finally {
         if (browser) await browser.close();
+    }
+
+    if (global.gc) {
+        global.gc();
+    }
+}
+
+async function processBatch(batch, browser, progressBar) {
+    for (const anime of batch) {
+        try {
+            const seasonCount = await checkSeasons(browser, anime);
+            progressBar.increment();
+            if (global.gc) {
+                global.gc();
+            }
+            process.nextTick(() => {});
+        } catch (error) {
+            console.error(
+                `\n Erreur lors du scraping de ${anime.name}:`,
+                error
+            );
+        }
     }
 }
 
@@ -299,4 +296,5 @@ function delay(time) {
     });
 }
 
-scrapeAnime();
+// Exécuter scrapeAnime dans process.nextTick pour permettre au garbage collector de fonctionner entre les itérations
+process.nextTick(scrapeAnime);
