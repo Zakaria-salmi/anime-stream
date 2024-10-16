@@ -253,7 +253,6 @@ async function scrapeAnime() {
                 }
             }
             animeCount++;
-            await delay(2000); // Attendre 2 secondes entre chaque anime
         }
 
         console.log("scraped finished, anime count : ", animeCount);
