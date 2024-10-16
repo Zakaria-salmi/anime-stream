@@ -4,7 +4,7 @@ const path = require("path");
 
 async function launchBrowser() {
     const browser = await puppeteer.launch({
-        headless: false,
+        headless: true,
     });
     const page = await browser.newPage();
     return { browser, page };
@@ -22,6 +22,7 @@ async function handleCookieBanner(page) {
             { hidden: true }
         );
     }
+    await delay(500);
 }
 
 async function applyFilters(page) {
@@ -34,8 +35,11 @@ async function applyFilters(page) {
     const filterButton = await page.waitForSelector("#btnTriList");
 
     await animeCheckbox.click();
+    await delay(500);
     await vostfrCheckbox.click();
+    await delay(500);
     await filterButton.click();
+    await delay(500);
 }
 
 async function fetchAnimes(page) {
@@ -74,6 +78,7 @@ async function checkSeasons(browser, anime) {
             const response = await newPage.goto(seasonUrl, {
                 waitUntil: "domcontentloaded",
             });
+            await delay(500);
 
             if (response.status() === 404) {
                 console.log(`La saison ${season} n'existe pas pour cet anime.`);
@@ -161,6 +166,8 @@ async function checkSeasons(browser, anime) {
             );
             pageExists = false;
         }
+
+        await delay(500);
     }
 
     const data = {
@@ -218,11 +225,13 @@ async function scrapeAnime() {
     try {
         const { browser, page } = await launchBrowser();
         await page.goto("https://anime-sama.fr/catalogue/");
+        await delay(500);
 
         await handleCookieBanner(page);
         await applyFilters(page);
 
         const animes = await fetchAnimes(page);
+        console.log(animes);
         let animeCount = 0;
 
         for (const anime of animes) {
@@ -244,6 +253,7 @@ async function scrapeAnime() {
                 }
             }
             animeCount++;
+            await delay(2000); // Attendre 2 secondes entre chaque anime
         }
 
         console.log("scraped finished, anime count : ", animeCount);
