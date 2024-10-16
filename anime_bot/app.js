@@ -1,10 +1,21 @@
 const puppeteer = require("puppeteer");
 const fs = require("fs").promises;
 const path = require("path");
+const cliProgress = require("cli-progress");
 
 async function launchBrowser() {
     const browser = await puppeteer.launch({
-        headless: true,
+        headless: "new",
+        args: [
+            "--no-sandbox",
+            "--disable-setuid-sandbox",
+            "--disable-dev-shm-usage",
+            "--disable-accelerated-2d-canvas",
+            "--no-first-run",
+            "--no-zygote",
+            "--disable-gpu",
+        ],
+        defaultViewport: null,
     });
     const page = await browser.newPage();
     return { browser, page };
@@ -78,7 +89,6 @@ async function checkSeasons(browser, anime) {
             const response = await newPage.goto(seasonUrl, {
                 waitUntil: "domcontentloaded",
             });
-            await delay(500);
 
             if (response.status() === 404) {
                 console.log(`La saison ${season} n'existe pas pour cet anime.`);
@@ -223,6 +233,8 @@ async function writeToJson(data, filename) {
 
 async function scrapeAnime() {
     try {
+        console.clear(); // Nettoie la console avant de commencer
+
         const { browser, page } = await launchBrowser();
         await page.goto("https://anime-sama.fr/catalogue/");
         await delay(500);
@@ -231,36 +243,53 @@ async function scrapeAnime() {
         await applyFilters(page);
 
         const animes = await fetchAnimes(page);
-        console.log(animes);
+        console.log("Nombre d'animes : ", animes.length);
+
+        // Créer une nouvelle barre de progression
+        const progressBar = new cliProgress.SingleBar(
+            {},
+            cliProgress.Presets.shades_classic
+        );
+
+        // Démarrer la barre de progression
+        progressBar.start(animes.length, 0);
+
         let animeCount = 0;
 
         for (const anime of animes) {
-            let retries = 3;
-            while (retries > 0) {
-                try {
-                    const seasonCount = await checkSeasons(browser, anime);
-                    console.log(
-                        `L'anime ${anime.link} a ${seasonCount} saison(s).`
-                    );
-                    break;
-                } catch (error) {
-                    console.error(
-                        `Erreur lors du scraping de ${anime.name}, tentative restante : ${retries}`
-                    );
-                    retries--;
-                    if (retries === 0) throw error;
-                    await delay(5000); // Attendre 5 secondes avant de réessayer
-                }
+            try {
+                const seasonCount = await checkSeasons(browser, anime);
+                animeCount++;
+
+                // Mettre à jour la barre de progression
+                progressBar.update(animeCount);
+
+                // Afficher les informations sur une nouvelle ligne
+                console.log(
+                    `\nL'anime ${anime.name} a ${seasonCount} saison(s).`
+                );
+            } catch (error) {
+                console.error(
+                    `\nErreur lors du scraping de ${anime.name}:`,
+                    error
+                );
             }
-            animeCount++;
         }
 
-        console.log("scraped finished, anime count : ", animeCount);
+        // Arrêter la barre de progression
+        progressBar.stop();
+
+        console.log(
+            "\nScraping terminé, nombre d'animes traités : ",
+            animeCount
+        );
 
         await page.close();
         await browser.close();
     } catch (error) {
-        console.error("Error during scraping:", error);
+        console.error("Erreur pendant le scraping:", error);
+    } finally {
+        if (browser) await browser.close();
     }
 }
 
