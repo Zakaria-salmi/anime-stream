@@ -34,11 +34,8 @@ async function applyFilters(page) {
     const filterButton = await page.waitForSelector("#btnTriList");
 
     await animeCheckbox.click();
-    await delay(500);
     await vostfrCheckbox.click();
-    await delay(500);
     await filterButton.click();
-    await delay(500);
 }
 
 async function fetchAnimes(page) {
@@ -51,14 +48,14 @@ async function fetchAnimes(page) {
             }
         );
 
-        return visibleAnimes.map((anime) => {
+        return visibleAnimes.map((anime, index) => {
             const linkElement = anime.querySelector("div > a");
             const imgElement = anime.querySelector("div > a > img");
             const h1Element = anime.querySelector("div > h1");
             const link = linkElement ? linkElement.href : "Link not found";
             const img = imgElement ? imgElement.src : "Image not found";
             const name = h1Element ? h1Element.textContent : "Name not found";
-            return { link, img, name };
+            return { id: index + 1, link, img, name };
         });
     });
 }
@@ -164,11 +161,10 @@ async function checkSeasons(browser, anime) {
             );
             pageExists = false;
         }
-
-        await delay(500);
     }
 
     const data = {
+        id: anime.id,
         anime: anime.name,
         img: anime.img,
         seasons: allSeasons,
@@ -199,7 +195,7 @@ async function writeToJson(data, filename) {
         }
 
         const animeIndex = existingData.findIndex(
-            (anime) => anime.anime === data.anime
+            (anime) => anime.id === data.id
         );
         if (animeIndex !== -1) {
             existingData[animeIndex] = data;
@@ -229,19 +225,26 @@ async function scrapeAnime() {
         const animes = await fetchAnimes(page);
         let animeCount = 0;
 
-        for (let i = 0; i < 2; i++) {
-            const anime = animes[i];
-            const seasonCount = await checkSeasons(browser, anime);
-
+        for (const anime of animes) {
+            let retries = 3;
+            while (retries > 0) {
+                try {
+                    const seasonCount = await checkSeasons(browser, anime);
+                    console.log(
+                        `L'anime ${anime.link} a ${seasonCount} saison(s).`
+                    );
+                    break;
+                } catch (error) {
+                    console.error(
+                        `Erreur lors du scraping de ${anime.name}, tentative restante : ${retries}`
+                    );
+                    retries--;
+                    if (retries === 0) throw error;
+                    await delay(5000); // Attendre 5 secondes avant de réessayer
+                }
+            }
             animeCount++;
         }
-
-        // for (const anime of animes) {
-        //     const seasonCount = await checkSeasons(browser, anime);
-        //     console.log(
-        //         `The anime ${anime.link} has ${seasonCount} season(s).`
-        //     );
-        // }
 
         console.log("scraped finished, anime count : ", animeCount);
 
