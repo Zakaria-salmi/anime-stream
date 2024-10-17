@@ -3,22 +3,6 @@ const fs = require("fs").promises;
 const path = require("path");
 const cliProgress = require("cli-progress");
 
-async function launchBrowser() {
-    const browser = await puppeteer.launch({
-        headless: true,
-        args: [
-            "--no-sandbox",
-            "--disable-setuid-sandbox",
-            "--disable-dev-shm-usage",
-            "--disable-gpu",
-        ],
-        defaultViewport: null,
-    });
-    const page = await browser.newPage();
-
-    return { browser, page };
-}
-
 async function handleCookieBanner(page) {
     const cookieBanner = await page.$(
         "#qc-cmp2-ui > div.qc-cmp2-footer.qc-cmp2-footer-overlay.qc-cmp2-footer-scrolled > div > button.css-k8o10q"
@@ -73,120 +57,94 @@ async function fetchAnimes(page) {
     });
 }
 
-async function checkSeasons(browser, anime) {
-    let season = 1;
-    let pageExists = true;
-    let allSeasons = {};
+async function fetchAnimeData(anime, browser) {
+    const newPage = await browser.newPage();
+    await newPage.goto(anime.link);
 
-    while (pageExists) {
-        const seasonUrl = `${anime.link}/saison${season}/vostfr`;
-        console.log(` Vérification de l'URL : ${seasonUrl}`);
+    const seasonsDiv = await newPage.waitForSelector(
+        "#sousBlocMilieu > div.mx-3.md\\:mx-10 > div.flex.flex-wrap.overflow-y-hidden.justify-start.bg-slate-900.bg-opacity-70.rounded.mt-2.h-auto"
+    );
 
-        try {
-            const newPage = await browser.newPage();
-            const response = await newPage.goto(seasonUrl);
+    const seasonsData = await newPage.evaluate((seasonsDiv) => {
+        const links = seasonsDiv.querySelectorAll("a");
+        return Array.from(links).map((link) => {
+            const href = link.getAttribute("href");
+            const seasonName =
+                link.querySelector("div")?.textContent.trim() ||
+                "Name not found";
+            return { href, seasonName };
+        });
+    }, seasonsDiv);
 
-            if (response.status() === 404) {
-                pageExists = false;
-            } else {
-                const errorMsg = await newPage.$("#msgErrorEp");
-                if (errorMsg && (await errorMsg.isVisible())) {
-                    console.log(`Passage à l'anime suivant.`);
-                    pageExists = false;
-                } else {
-                    console.log(
-                        `Récupération des épisodes pour la saison ${season} de ${anime.name}`
-                    );
-                    const episodes = await newPage.evaluate(() => {
-                        const episodeSelect =
-                            document.querySelector("#selectEpisodes");
-                        const results = [];
+    const data = {};
+    data.id = anime.id;
+    data.url = anime.link;
+    data.animeName = anime.name;
+    data.img = anime.img;
+    data.seasons = seasonsData;
 
-                        if (episodeSelect) {
-                            for (
-                                let i = 0;
-                                i < episodeSelect.options.length;
-                                i++
-                            ) {
-                                episodeSelect.selectedIndex = i;
-                                episodeSelect.dispatchEvent(
-                                    new Event("change")
-                                );
+    await newPage.close();
+    return data;
+}
 
-                                const defaultPlayer =
-                                    document.querySelector("#playerDF");
-                                const playerSelect =
-                                    document.querySelector("#selectLecteurs");
-                                const players = [];
+async function fetchAllEpisodes(animeData, browser) {
+    const allEpisodes = [];
 
-                                if (defaultPlayer) {
-                                    players.push({
-                                        name: "Default Player",
-                                        link: defaultPlayer.src,
-                                    });
-                                }
+    for (const season of animeData.seasons) {
+        const seasonPage = await browser.newPage();
+        await seasonPage.goto(`${animeData.url}/${season.href}`);
 
-                                if (playerSelect) {
-                                    for (
-                                        let j = 0;
-                                        j < playerSelect.options.length;
-                                        j++
-                                    ) {
-                                        playerSelect.selectedIndex = j;
-                                        playerSelect.dispatchEvent(
-                                            new Event("change")
-                                        );
-                                        const player =
-                                            document.querySelector("#playerDF");
-                                        if (player) {
-                                            players.push({
-                                                name: playerSelect.options[j]
-                                                    .text,
-                                                link: player.src,
-                                            });
-                                        }
-                                    }
-                                }
+        const episodesData = await seasonPage.evaluate(async () => {
+            const episodeElements = document.querySelectorAll(
+                "#selectEpisodes option"
+            );
+            const episodes = [];
 
-                                results.push({
-                                    episode: episodeSelect.options[i].text,
-                                    players: players,
-                                });
-                            }
-                        }
+            for (const episode of episodeElements) {
+                const episodeNumber = episode.textContent.trim();
+                const players = [];
 
-                        return results;
-                    });
+                episode.selected = true;
+                episode.dispatchEvent(new Event("change"));
 
-                    allSeasons[season] = episodes;
-                    season++;
+                await new Promise((resolve) => setTimeout(resolve, 1000));
 
-                    if (global.gc) {
-                        global.gc();
+                const playerButtons =
+                    document.querySelectorAll(".buttonPlayer");
+                for (const button of playerButtons) {
+                    button.click();
+                    await new Promise((resolve) => setTimeout(resolve, 500));
+                    const iframe = document.querySelector("#playerDF");
+                    if (iframe) {
+                        players.push({
+                            name: button.textContent.trim(),
+                            src: iframe.src,
+                        });
                     }
                 }
+
+                episodes.push({
+                    episodeNumber: episodeNumber,
+                    players: players,
+                });
             }
 
-            await newPage.close(); // Fermer la page après utilisation
-        } catch (error) {
-            console.error(
-                `Erreur lors de la vérification de l'URL ${seasonUrl}:`,
-                error
-            );
-            pageExists = false;
-        }
+            return episodes;
+        });
+
+        allEpisodes.push({
+            seasonName: season.seasonName,
+            episodes: episodesData,
+        });
+        console.log(allEpisodes);
+
+        await seasonPage.close();
     }
 
-    const data = {
-        id: anime.id,
-        anime: anime.name,
-        img: anime.img,
-        seasons: allSeasons,
-    };
+    animeData.episodes = allEpisodes;
+    console.log("Données complètes de l'anime avec épisodes :", animeData);
 
-    await writeToJson(data, "animes.json");
-
-    return season - 1;
+    return animeData;
 }
 
 async function writeToJson(data, filename) {
@@ -225,15 +183,13 @@ async function writeToJson(data, filename) {
 }
 
 async function scrapeAnime() {
-    let browser;
-    try {
-        console.clear();
+    const browser = await puppeteer.launch({
+        headless: false,
+    });
+    const page = await browser.newPage();
 
-        const { browser: newBrowser, page } = await launchBrowser();
-        browser = newBrowser;
-        await page.goto("https://anime-sama.fr/catalogue/", {
-            waitUntil: "networkidle2",
-        });
+    try {
+        await page.goto("https://anime-sama.fr/catalogue/");
         await delay(500);
 
         await handleCookieBanner(page);
@@ -248,10 +204,11 @@ async function scrapeAnime() {
         );
         progressBar.start(animes.length, 0);
 
-        const batchSize = 50; // Nombre d'animes à traiter par lot
-        for (let i = 0; i < animes.length; i += batchSize) {
-            const batch = animes.slice(i, i + batchSize);
-            await processBatch(batch, browser, progressBar);
+        for (let i = 0; i < animes.length; i++) {
+            const data = await fetchAnimeData(animes[i], browser);
+            const dataWithEpisodes = await fetchAllEpisodes(data, browser);
+            await writeToJson(dataWithEpisodes, "animes.json");
+            progressBar.increment();
         }
 
         progressBar.stop();
@@ -269,24 +226,6 @@ async function scrapeAnime() {
 
     if (global.gc) {
         global.gc();
-    }
-}
-
-async function processBatch(batch, browser, progressBar) {
-    for (const anime of batch) {
-        try {
-            const seasonCount = await checkSeasons(browser, anime);
-            progressBar.increment();
-            if (global.gc) {
-                global.gc();
-            }
-            process.nextTick(() => {});
-        } catch (error) {
-            console.error(
-                `\n Erreur lors du scraping de ${anime.name}:`,
-                error
-            );
-        }
     }
 }
 
