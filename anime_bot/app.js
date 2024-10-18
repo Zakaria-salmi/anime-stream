@@ -1,21 +1,30 @@
 const puppeteer = require("puppeteer");
-const fs = require("fs").promises;
-const path = require("path");
 const cliProgress = require("cli-progress");
+const dotenv = require("dotenv");
 
-async function handleCookieBanner(page) {
-    const cookieBanner = await page.$(
-        "#qc-cmp2-ui > div.qc-cmp2-footer.qc-cmp2-footer-overlay.qc-cmp2-footer-scrolled > div > button.css-k8o10q"
-    );
+dotenv.config();
 
-    if (cookieBanner) {
-        await cookieBanner.click();
-        await page.waitForSelector(
-            "#qc-cmp2-ui > div.qc-cmp2-footer.qc-cmp2-footer-overlay.qc-cmp2-footer-scrolled > div > button.css-k8o10q",
-            { hidden: true }
+const { createClient } = require("@supabase/supabase-js");
+const supabaseUrl = "https://quxaxcdogbpjummcpeok.supabase.co";
+const supabaseKey = process.env.SUPABASE_KEY;
+const supabase = createClient(supabaseUrl, supabaseKey);
+
+function handleCookieBanner(page) {
+    return new Promise(async (resolve) => {
+        const cookieBanner = await page.$(
+            "#qc-cmp2-ui > div.qc-cmp2-footer.qc-cmp2-footer-overlay.qc-cmp2-footer-scrolled > div > button.css-k8o10q"
         );
-    }
-    await delay(500);
+
+        if (cookieBanner) {
+            await cookieBanner.click();
+            await page.waitForSelector(
+                "#qc-cmp2-ui > div.qc-cmp2-footer.qc-cmp2-footer-overlay.qc-cmp2-footer-scrolled > div > button.css-k8o10q",
+                { hidden: true }
+            );
+        }
+        await delay(500);
+        resolve();
+    });
 }
 
 async function applyFilters(page) {
@@ -36,7 +45,7 @@ async function applyFilters(page) {
 }
 
 async function fetchAnimes(page) {
-    return await page.evaluate(() => {
+    return page.evaluate(() => {
         const resultCatalog = document.querySelector("#result_catalogue");
         const visibleAnimes = Array.from(resultCatalog.children).filter(
             (child) => {
@@ -59,6 +68,7 @@ async function fetchAnimes(page) {
 
 async function fetchAnimeData(anime, browser) {
     const newPage = await browser.newPage();
+    await newPage.setCacheEnabled(true);
     await newPage.goto(anime.link);
 
     const seasonsDiv = await newPage.waitForSelector(
@@ -92,43 +102,47 @@ async function fetchAllEpisodes(animeData, browser) {
 
     for (const season of animeData.seasons) {
         const seasonPage = await browser.newPage();
+        await seasonPage.setCacheEnabled(true);
         await seasonPage.goto(`${animeData.url}/${season.href}`);
 
         const episodesData = await seasonPage.evaluate(async () => {
-            const episodeElements = document.querySelectorAll(
-                "#selectEpisodes option"
-            );
             const episodes = [];
+            const episodeSelect = document.querySelector("#selectEpisodes");
+            const lecteurSelect = document.querySelector("#selectLecteurs");
+            const iframe = document.querySelector("#playerDF");
 
-            for (const episode of episodeElements) {
-                const episodeNumber = episode.textContent.trim();
-                const players = [];
+            if (episodeSelect && lecteurSelect && iframe) {
+                const episodeOptions = Array.from(episodeSelect.options);
+                const lecteurOptions = Array.from(lecteurSelect.options);
 
-                episode.selected = true;
-                episode.dispatchEvent(new Event("change"));
+                for (const episodeOption of episodeOptions) {
+                    const episodeNumber = episodeOption.textContent.trim();
+                    const players = [];
 
-                await new Promise((resolve) => setTimeout(resolve, 1000));
+                    episodeSelect.value = episodeOption.value;
+                    episodeSelect.dispatchEvent(new Event("change"));
 
-                const playerButtons =
-                    document.querySelectorAll(".buttonPlayer");
-                for (const button of playerButtons) {
-                    button.click();
-                    await new Promise((resolve) => setTimeout(resolve, 500));
-                    const iframe = document.querySelector("#playerDF");
-                    if (iframe) {
+                    for (const lecteurOption of lecteurOptions) {
+                        const lecteurName = lecteurOption.textContent.trim();
+                        const lecteurValue = lecteurOption.value;
+
+                        lecteurSelect.value = lecteurValue;
+                        lecteurSelect.dispatchEvent(new Event("change"));
+
                         players.push({
-                            name: button.textContent.trim(),
+                            name: lecteurValue,
                             src: iframe.src,
                         });
                     }
-                }
 
-                episodes.push({
-                    episodeNumber: episodeNumber,
-                    players: players,
-                });
+                    episodes.push({
+                        episodeNumber,
+                        players,
+                    });
+                }
             }
 
+            console.log(episodes);
             return episodes;
         });
 
@@ -136,47 +150,89 @@ async function fetchAllEpisodes(animeData, browser) {
             seasonName: season.seasonName,
             episodes: episodesData,
         });
-        console.log(allEpisodes);
 
         await seasonPage.close();
     }
 
     animeData.episodes = allEpisodes;
-    console.log("Données complètes de l'anime avec épisodes :", animeData);
 
     return animeData;
 }
 
-async function writeToJson(data, filename) {
+async function insertAnimeData(animeData) {
     try {
-        let existingData = [];
-        try {
-            const fileContent = await fs.readFile(filename, "utf8");
-            existingData = JSON.parse(fileContent);
-        } catch (error) {
-            console.log(
-                `Le fichier ${filename} n'existe pas encore ou est vide. Création d'un nouveau fichier.`
-            );
+        // Utiliser upsert pour l'anime
+        const { data: anime, error: animeError } = await supabase
+            .from("animes")
+            .upsert(
+                {
+                    name: animeData.animeName,
+                    image_url: animeData.img,
+                },
+                { onConflict: "name" }
+            )
+            .select()
+            .single();
+
+        if (animeError) throw animeError;
+
+        // Insérer les saisons et épisodes
+        for (const season of animeData.episodes) {
+            const { data: seasonData, error: seasonError } = await supabase
+                .from("seasons")
+                .upsert(
+                    {
+                        anime_id: anime.id,
+                        name: season.seasonName,
+                        url: `${animeData.url}/${season.seasonName}`,
+                    },
+                    { onConflict: ["anime_id", "name"] }
+                )
+                .select()
+                .single();
+
+            if (seasonError) throw seasonError;
+
+            for (const episode of season.episodes) {
+                const { data: episodeData, error: episodeError } =
+                    await supabase
+                        .from("episodes")
+                        .upsert(
+                            {
+                                season_id: seasonData.id,
+                                episode_number: episode.episodeNumber,
+                            },
+                            { onConflict: ["season_id", "episode_number"] }
+                        )
+                        .select()
+                        .single();
+
+                if (episodeError) throw episodeError;
+
+                // Upsert les lecteurs
+                for (const player of episode.players) {
+                    const { error: playerError } = await supabase
+                        .from("players")
+                        .upsert(
+                            {
+                                episode_id: episodeData.id,
+                                name: player.name,
+                                src: player.src,
+                            },
+                            { onConflict: ["episode_id", "name"] }
+                        );
+
+                    if (playerError) throw playerError;
+                }
+            }
         }
 
-        if (!Array.isArray(existingData)) {
-            existingData = [];
-        }
-
-        const animeIndex = existingData.findIndex(
-            (anime) => anime.id === data.id
+        console.log(
+            `Anime "${animeData.animeName}" inséré ou mis à jour avec succès.`
         );
-        if (animeIndex !== -1) {
-            existingData[animeIndex] = data;
-        } else {
-            existingData.push(data);
-        }
-
-        const jsonData = JSON.stringify(existingData, null, 2);
-        await fs.writeFile(filename, jsonData, "utf8");
     } catch (error) {
         console.error(
-            `Erreur lors de l'écriture dans le fichier ${filename}:`,
+            `Erreur lors de l'insertion ou de la mise à jour de l'anime "${animeData.animeName}":`,
             error
         );
     }
@@ -184,9 +240,10 @@ async function writeToJson(data, filename) {
 
 async function scrapeAnime() {
     const browser = await puppeteer.launch({
-        headless: false,
+        args: ["--no-sandbox"],
     });
     const page = await browser.newPage();
+    await page.setCacheEnabled(true);
 
     try {
         await page.goto("https://anime-sama.fr/catalogue/");
@@ -204,11 +261,25 @@ async function scrapeAnime() {
         );
         progressBar.start(animes.length, 0);
 
-        for (let i = 0; i < animes.length; i++) {
-            const data = await fetchAnimeData(animes[i], browser);
-            const dataWithEpisodes = await fetchAllEpisodes(data, browser);
-            await writeToJson(dataWithEpisodes, "animes.json");
-            progressBar.increment();
+        const batchSize = 5; // Taille du lot
+        for (let i = 0; i < animes.length; i += batchSize) {
+            const batch = animes.slice(i, i + batchSize);
+            await Promise.all(
+                batch.map(async (anime) => {
+                    const data = await fetchAnimeData(anime, browser);
+                    const dataWithEpisodes = await fetchAllEpisodes(
+                        data,
+                        browser
+                    );
+                    await insertAnimeData(dataWithEpisodes);
+                    progressBar.increment();
+                })
+            );
+
+            await delay(2000);
+            if (global.gc) {
+                global.gc();
+            }
         }
 
         progressBar.stop();
