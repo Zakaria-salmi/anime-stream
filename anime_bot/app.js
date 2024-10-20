@@ -6,6 +6,10 @@ const randomUseragent = require("random-useragent");
 
 dotenv.config();
 
+if (process.env.NODE_ENV === "development") {
+    dotenv.config({ path: ".env.development", override: true });
+}
+
 puppeteer.use(StealthPlugin());
 
 const { createClient } = require("@supabase/supabase-js");
