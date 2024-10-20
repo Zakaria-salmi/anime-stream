@@ -1,13 +1,19 @@
-const puppeteer = require("puppeteer");
+const puppeteer = require("puppeteer-extra");
+const StealthPlugin = require("puppeteer-extra-plugin-stealth");
 const cliProgress = require("cli-progress");
 const dotenv = require("dotenv");
+const randomUseragent = require("random-useragent");
 
 dotenv.config();
 
+puppeteer.use(StealthPlugin());
+
 const { createClient } = require("@supabase/supabase-js");
-const supabaseUrl = "https://quxaxcdogbpjummcpeok.supabase.co";
+const supabaseUrl = process.env.SUPABASE_URL;
 const supabaseKey = process.env.SUPABASE_KEY;
 const supabase = createClient(supabaseUrl, supabaseKey);
+
+let browser;
 
 function handleCookieBanner(page) {
     return new Promise(async (resolve) => {
@@ -69,10 +75,14 @@ async function fetchAnimes(page) {
 async function fetchAnimeData(anime, browser) {
     const newPage = await browser.newPage();
     await newPage.setCacheEnabled(true);
-    await newPage.goto(anime.link);
+    await newPage.goto(anime.link, {
+        timeout: 6000000,
+    });
+    await newPage.waitForSelector("#sousBlocMilieu", { timeout: 6000000 });
 
     const seasonsDiv = await newPage.waitForSelector(
-        "#sousBlocMilieu > div.mx-3.md\\:mx-10 > div.flex.flex-wrap.overflow-y-hidden.justify-start.bg-slate-900.bg-opacity-70.rounded.mt-2.h-auto"
+        "#sousBlocMilieu > div.mx-3.md\\:mx-10 > div.flex.flex-wrap.overflow-y-hidden.justify-start.bg-slate-900.bg-opacity-70.rounded.mt-2.h-auto",
+        { timeout: 6000000 }
     );
 
     const seasonsData = await newPage.evaluate((seasonsDiv) => {
@@ -97,13 +107,21 @@ async function fetchAnimeData(anime, browser) {
     return data;
 }
 
-async function fetchAllEpisodes(animeData, browser) {
+async function fetchAllEpisodes(animeData, currentBrowser) {
+    const browser = currentBrowser || (await ensureBrowser());
     const allEpisodes = [];
 
     for (const season of animeData.seasons) {
-        const seasonPage = await browser.newPage();
-        await seasonPage.setCacheEnabled(true);
-        await seasonPage.goto(`${animeData.url}/${season.href}`);
+        const seasonPage = await browser.newPage({
+            timeout: 6000000,
+        });
+        await seasonPage.setCacheEnabled(false);
+        await seasonPage.deleteCookie(...(await seasonPage.cookies()));
+
+        await seasonPage.goto(`${animeData.url}/${season.href}`, {
+            timeout: 6000000,
+            waitUntil: "load",
+        });
 
         const episodesData = await seasonPage.evaluate(async () => {
             const episodes = [];
@@ -161,33 +179,25 @@ async function fetchAllEpisodes(animeData, browser) {
 
 async function insertAnimeData(animeData) {
     try {
-        // Utiliser upsert pour l'anime
         const { data: anime, error: animeError } = await supabase
             .from("animes")
-            .upsert(
-                {
-                    name: animeData.animeName,
-                    image_url: animeData.img,
-                },
-                { onConflict: "name" }
-            )
+            .upsert({
+                name: animeData.animeName,
+                image_url: animeData.img,
+            })
             .select()
             .single();
 
         if (animeError) throw animeError;
 
-        // Insérer les saisons et épisodes
         for (const season of animeData.episodes) {
             const { data: seasonData, error: seasonError } = await supabase
                 .from("seasons")
-                .upsert(
-                    {
-                        anime_id: anime.id,
-                        name: season.seasonName,
-                        url: `${animeData.url}/${season.seasonName}`,
-                    },
-                    { onConflict: ["anime_id", "name"] }
-                )
+                .upsert({
+                    anime_id: anime.id,
+                    name: season.seasonName,
+                    url: `${animeData.url}/${season.seasonName}`,
+                })
                 .select()
                 .single();
 
@@ -197,30 +207,23 @@ async function insertAnimeData(animeData) {
                 const { data: episodeData, error: episodeError } =
                     await supabase
                         .from("episodes")
-                        .upsert(
-                            {
-                                season_id: seasonData.id,
-                                episode_number: episode.episodeNumber,
-                            },
-                            { onConflict: ["season_id", "episode_number"] }
-                        )
+                        .upsert({
+                            season_id: seasonData.id,
+                            episode_number: episode.episodeNumber,
+                        })
                         .select()
                         .single();
 
                 if (episodeError) throw episodeError;
 
-                // Upsert les lecteurs
                 for (const player of episode.players) {
                     const { error: playerError } = await supabase
                         .from("players")
-                        .upsert(
-                            {
-                                episode_id: episodeData.id,
-                                name: player.name,
-                                src: player.src,
-                            },
-                            { onConflict: ["episode_id", "name"] }
-                        );
+                        .upsert({
+                            episode_id: episodeData.id,
+                            name: player.name,
+                            src: player.src,
+                        });
 
                     if (playerError) throw playerError;
                 }
@@ -239,64 +242,95 @@ async function insertAnimeData(animeData) {
 }
 
 async function scrapeAnime() {
-    const browser = await puppeteer.launch({
-        args: ["--no-sandbox"],
-    });
-    const page = await browser.newPage();
-    await page.setCacheEnabled(true);
-
     try {
-        await page.goto("https://anime-sama.fr/catalogue/");
-        await delay(500);
+        browser = await puppeteer.launch({
+            headless: true,
+            timeout: 6000000,
+            protocolTimeout: 6000000,
+            args: [
+                "--no-sandbox",
+                "--disable-setuid-sandbox",
+                "--disable-features=site-per-process",
+            ],
+        });
+        const page = await browser.newPage();
+        await page.setCacheEnabled(false);
+        const userAgent = randomUseragent.getRandom();
+        await page.setUserAgent(userAgent);
 
-        await handleCookieBanner(page);
-        await applyFilters(page);
+        try {
+            await page.deleteCookie(...(await page.cookies()));
 
-        const animes = await fetchAnimes(page);
-        console.log("Nombre d'animes : ", animes.length);
+            await page.goto("https://anime-sama.fr/catalogue/", {
+                timeout: 6000000,
+                waitUntil: "load",
+                maxRedirects: 100000000,
+            });
+            await delay(500);
 
-        const progressBar = new cliProgress.SingleBar(
-            {},
-            cliProgress.Presets.shades_classic
-        );
-        progressBar.start(animes.length, 0);
+            await handleCookieBanner(page);
+            await applyFilters(page);
 
-        const batchSize = 5; // Taille du lot
-        for (let i = 0; i < animes.length; i += batchSize) {
-            const batch = animes.slice(i, i + batchSize);
-            await Promise.all(
-                batch.map(async (anime) => {
-                    const data = await fetchAnimeData(anime, browser);
-                    const dataWithEpisodes = await fetchAllEpisodes(
-                        data,
-                        browser
-                    );
-                    await insertAnimeData(dataWithEpisodes);
-                    progressBar.increment();
-                })
+            const animes = await fetchAnimes(page);
+            console.log("Nombre d'animes : ", animes.length);
+
+            const progressBar = new cliProgress.SingleBar(
+                {},
+                cliProgress.Presets.shades_classic
+            );
+            progressBar.start(animes.length, 0);
+
+            const batchSize = 5;
+            for (let i = 0; i < animes.length; i += batchSize) {
+                const batch = animes.slice(i, i + batchSize);
+                await Promise.all(
+                    batch.map(async (anime) => {
+                        try {
+                            const data = await retryOperation(() =>
+                                fetchAnimeData(anime, browser)
+                            );
+                            if (data) {
+                                const dataWithEpisodes = await retryOperation(
+                                    () => fetchAllEpisodes(data, browser)
+                                );
+                                await insertAnimeData(dataWithEpisodes);
+                            }
+                        } catch (error) {
+                            console.error(
+                                `Erreur lors du traitement de l'anime ${anime.name}:`,
+                                error
+                            );
+                        } finally {
+                            progressBar.increment();
+                        }
+                    })
+                );
+
+                await delay(5000);
+
+                if (global.gc) {
+                    global.gc();
+                }
+            }
+
+            progressBar.stop();
+            console.log(
+                "\n Scraping terminé, nombre d'animes traités : ",
+                animes.length
             );
 
-            await delay(2000);
-            if (global.gc) {
-                global.gc();
-            }
+            await page.close();
+        } catch (error) {
+            console.error("Erreur pendant le scraping:", error);
+        } finally {
+            if (browser) await browser.close();
         }
 
-        progressBar.stop();
-        console.log(
-            "\n Scraping terminé, nombre d'animes traités : ",
-            animes.length
-        );
-
-        await page.close();
+        if (global.gc) {
+            global.gc();
+        }
     } catch (error) {
         console.error("Erreur pendant le scraping:", error);
-    } finally {
-        if (browser) await browser.close();
-    }
-
-    if (global.gc) {
-        global.gc();
     }
 }
 
@@ -306,5 +340,29 @@ function delay(time) {
     });
 }
 
-// Exécuter scrapeAnime dans process.nextTick pour permettre au garbage collector de fonctionner entre les itérations
+async function retryOperation(operation, maxRetries = 3) {
+    for (let i = 0; i < maxRetries; i++) {
+        try {
+            return await operation();
+        } catch (error) {
+            if (i === maxRetries - 1) throw error;
+            await delay(5000);
+        }
+    }
+}
+
+async function ensureBrowser() {
+    if (!browser || !browser.isConnected()) {
+        if (browser) {
+            await browser.close();
+        }
+        browser = await puppeteer.launch({
+            headless: true,
+            timeout: 6000000,
+            args: ["--no-sandbox", "--disable-setuid-sandbox"],
+        });
+    }
+    return browser;
+}
+
 process.nextTick(scrapeAnime);
