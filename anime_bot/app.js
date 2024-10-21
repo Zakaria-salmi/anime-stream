@@ -80,6 +80,7 @@ async function fetchAnimeData(anime, browser) {
     const newPage = await browser.newPage();
     await newPage.setCacheEnabled(true);
     await newPage.goto(anime.link, {
+        waitUntil: "load",
         timeout: 6000000,
     });
     await newPage.waitForSelector("#sousBlocMilieu", { timeout: 6000000 });
@@ -183,63 +184,142 @@ async function fetchAllEpisodes(animeData, currentBrowser) {
 
 async function insertAnimeData(animeData) {
     try {
-        const { data: anime, error: animeError } = await supabase
+        let animeUpdated = false;
+        let seasonsUpdated = false;
+        let episodesUpdated = false;
+        let playersUpdated = false;
+
+        let { data: existingAnime, error: animeError } = await supabase
             .from("animes")
-            .upsert({
-                name: animeData.animeName,
-                image_url: animeData.img,
-            })
-            .select()
+            .select("*")
+            .eq("name", animeData.animeName)
             .single();
 
-        if (animeError) throw animeError;
+        if (animeError && animeError.code !== "PGRST116") throw animeError;
 
-        for (const season of animeData.episodes) {
-            const { data: seasonData, error: seasonError } = await supabase
-                .from("seasons")
+        if (!existingAnime || existingAnime.image_url !== animeData.img) {
+            const { data: anime, error: upsertError } = await supabase
+                .from("animes")
                 .upsert({
-                    anime_id: anime.id,
-                    name: season.seasonName,
-                    url: `${animeData.url}/${season.seasonName}`,
+                    name: animeData.animeName,
+                    image_url: animeData.img,
                 })
                 .select()
                 .single();
 
-            if (seasonError) throw seasonError;
+            if (upsertError) throw upsertError;
+            existingAnime = anime;
+            animeUpdated = true;
+        }
+
+        for (const season of animeData.episodes) {
+            let { data: existingSeason, error: seasonError } = await supabase
+                .from("seasons")
+                .select("*")
+                .eq("anime_id", existingAnime.id)
+                .eq("name", season.seasonName)
+                .single();
+
+            if (seasonError && seasonError.code !== "PGRST116")
+                throw seasonError;
+
+            if (
+                !existingSeason ||
+                existingSeason.url !== `${animeData.url}/${season.seasonName}`
+            ) {
+                const { data: seasonData, error: upsertError } = await supabase
+                    .from("seasons")
+                    .upsert({
+                        anime_id: existingAnime.id,
+                        name: season.seasonName,
+                        url: `${animeData.url}/${season.seasonName}`,
+                    })
+                    .select()
+                    .single();
+
+                if (upsertError) throw upsertError;
+                existingSeason = seasonData;
+                seasonsUpdated = true;
+            }
 
             for (const episode of season.episodes) {
-                const { data: episodeData, error: episodeError } =
+                let { data: existingEpisode, error: episodeError } =
                     await supabase
                         .from("episodes")
-                        .upsert({
-                            season_id: seasonData.id,
-                            episode_number: episode.episodeNumber,
-                        })
-                        .select()
+                        .select("*")
+                        .eq("season_id", existingSeason.id)
+                        .eq("episode_number", episode.episodeNumber)
                         .single();
 
-                if (episodeError) throw episodeError;
+                if (episodeError && episodeError.code !== "PGRST116")
+                    throw episodeError;
+
+                if (!existingEpisode) {
+                    const { data: episodeData, error: upsertError } =
+                        await supabase
+                            .from("episodes")
+                            .upsert({
+                                season_id: existingSeason.id,
+                                episode_number: episode.episodeNumber,
+                            })
+                            .select()
+                            .single();
+
+                    if (upsertError) throw upsertError;
+                    existingEpisode = episodeData;
+                    episodesUpdated = true;
+                }
 
                 for (const player of episode.players) {
-                    const { error: playerError } = await supabase
-                        .from("players")
-                        .upsert({
-                            episode_id: episodeData.id,
-                            name: player.name,
-                            src: player.src,
-                        });
+                    let { data: existingPlayer, error: playerError } =
+                        await supabase
+                            .from("players")
+                            .select("*")
+                            .eq("episode_id", existingEpisode.id)
+                            .eq("name", player.name)
+                            .single();
 
-                    if (playerError) throw playerError;
+                    if (playerError && playerError.code !== "PGRST116")
+                        throw playerError;
+
+                    if (!existingPlayer || existingPlayer.src !== player.src) {
+                        const { error: upsertError } = await supabase
+                            .from("players")
+                            .upsert({
+                                episode_id: existingEpisode.id,
+                                name: player.name,
+                                src: player.src,
+                            });
+
+                        if (upsertError) throw upsertError;
+                        playersUpdated = true;
+                    }
                 }
             }
         }
 
-        console.log(
-            `Anime "${animeData.animeName}" inséré ou mis à jour avec succès.`
-        );
+        if (
+            animeUpdated ||
+            seasonsUpdated ||
+            episodesUpdated ||
+            playersUpdated
+        ) {
+            console.log(` Anime "${animeData.animeName}" mis à jour :`);
+            if (animeUpdated)
+                console.log("- Informations de l'anime mises à jour");
+            if (seasonsUpdated)
+                console.log("- Nouvelles saisons ajoutées ou mises à jour");
+            if (episodesUpdated) console.log("- Nouveaux épisodes ajoutés");
+            if (playersUpdated)
+                console.log("- Nouveaux lecteurs ajoutés ou mis à jour");
+        } else {
+            console.log(
+                ` Anime "${animeData.animeName}" : Aucune mise à jour nécessaire.`
+            );
+        }
     } catch (error) {
         console.error(
-            `Erreur lors de l'insertion ou de la mise à jour de l'anime "${animeData.animeName}":`,
+            ` Erreur lors de la vérification ou de la mise à jour de l'anime "${animeData.animeName}":`,
             error
         );
     }
