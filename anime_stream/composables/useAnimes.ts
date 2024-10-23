@@ -1,4 +1,4 @@
-import { ref, computed, watch } from "vue";
+import { ref, watch } from "vue";
 
 interface Anime {
     id: number;
