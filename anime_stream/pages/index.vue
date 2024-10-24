@@ -70,13 +70,10 @@
                     <Icon name="heroicons:chevron-right" class="w-6 h-6" />
                 </button>
             </div>
-            <div
-                v-else
-                class="h-64 md:h-96 bg-gray-200 dark:bg-gray-800 flex items-center justify-center"
-            >
-                <p class="text-gray-500 dark:text-gray-400">
-                    Chargement du carrousel...
-                </p>
+            <div v-else class="h-64 md:h-96">
+                <div
+                    class="w-full h-full bg-gray-300 dark:bg-gray-700 animate-pulse rounded-lg"
+                ></div>
             </div>
         </section>
 

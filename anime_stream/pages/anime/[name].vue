@@ -1,6 +1,15 @@
 <template>
     <div>
-        <div class="container mx-auto px-4 py-8 mb-8 rounded-lg">
+        <div v-if="loading" class="container mx-auto px-4 py-8 mb-8 rounded-lg">
+            <div
+                class="h-12 w-3/4 mb-4 bg-gray-200 dark:bg-gray-700 animate-pulse rounded"
+            ></div>
+            <div
+                class="w-full h-64 md:h-96 bg-gray-200 dark:bg-gray-700 animate-pulse rounded-lg"
+            ></div>
+        </div>
+
+        <div v-else class="container mx-auto px-4 py-8 mb-8 rounded-lg">
             <h1 class="text-4xl md:text-6xl font-bold text-start mb-4">
                 {{ anime?.name }}
             </h1>
@@ -14,12 +23,20 @@
         </div>
 
         <div class="container mx-auto px-4">
-            <div v-if="anime?.description" class="mb-8">
-                <h2 class="text-2xl font-bold mb-4">Description</h2>
-                <p>{{ anime.description }}</p>
+            <div v-if="loading" class="mb-8">
+                <h2 class="text-2xl font-bold mb-4">Saisons</h2>
+                <div
+                    class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4"
+                >
+                    <div
+                        v-for="i in 5"
+                        :key="i"
+                        class="aspect-w-16 aspect-h-9 bg-gray-200 dark:bg-gray-700 animate-pulse rounded-lg"
+                    ></div>
+                </div>
             </div>
 
-            <div v-if="seasons.length" class="mb-8">
+            <div v-else-if="seasons.length" class="mb-8">
                 <h2 class="text-2xl font-bold mb-4">Saisons</h2>
                 <div
                     class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4"
@@ -27,7 +44,7 @@
                     <NuxtLink
                         v-for="season in seasons"
                         :key="season.id"
-                        :to="`/anime/${anime?.id}/season/${season.id}`"
+                        :to="`/anime/${anime?.name}/${season.name}`"
                         class="relative aspect-w-16 aspect-h-9 rounded-lg overflow-hidden cursor-pointer season-card"
                     >
                         <img
@@ -74,8 +91,11 @@ interface Season {
 const anime = ref<Anime | null>(null);
 const seasons = ref<Season[]>([]);
 const animeName = ref(route.params.name);
+const loading = ref(true);
 
 const fetchAnime = async () => {
+    console.log("Début du chargement");
+    loading.value = true;
     const { data, error } = await supabase
         .from("animes")
         .select("*")
@@ -84,6 +104,7 @@ const fetchAnime = async () => {
 
     if (error) {
         console.error("Erreur lors de la récupération de l'anime:", error);
+        loading.value = false;
         return;
     }
 
@@ -92,7 +113,10 @@ const fetchAnime = async () => {
 };
 
 const fetchSeasons = async () => {
-    if (!anime.value?.id) return;
+    if (!anime.value?.id) {
+        loading.value = false;
+        return;
+    }
 
     const { data, error } = await supabase
         .from("seasons")
@@ -102,6 +126,7 @@ const fetchSeasons = async () => {
 
     if (error) {
         console.error("Erreur lors de la récupération des saisons:", error);
+        loading.value = false;
         return;
     }
 
@@ -110,6 +135,9 @@ const fetchSeasons = async () => {
         const bNum = parseInt(b.name.replace(/\D/g, ""));
         return aNum - bNum;
     });
+
+    console.log("Fin du chargement");
+    loading.value = false;
 };
 
 onMounted(async () => {
@@ -144,5 +172,19 @@ onMounted(async () => {
 
 .dark-badge {
     background-color: rgba(0, 0, 0, 0.5);
+}
+
+.animate-pulse {
+    animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+@keyframes pulse {
+    0%,
+    100% {
+        opacity: 1;
+    }
+    50% {
+        opacity: 0.7;
+    }
 }
 </style>
