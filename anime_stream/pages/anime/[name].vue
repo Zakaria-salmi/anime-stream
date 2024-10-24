@@ -1,21 +1,15 @@
 <template>
     <div>
-        <div class="relative mb-8">
+        <div class="container mx-auto px-4 py-8 mb-8 rounded-lg">
+            <h1 class="text-4xl md:text-6xl font-bold text-start mb-4">
+                {{ anime?.name }}
+            </h1>
             <div class="w-full h-64 md:h-96 overflow-hidden">
                 <img
                     :src="anime?.image_url"
                     :alt="anime?.name"
-                    class="w-full h-full object-cover"
+                    class="w-full h-full object-cover rounded-lg"
                 />
-            </div>
-            <div
-                class="absolute inset-0 bg-black bg-opacity-50 flex items-center justify-center"
-            >
-                <h1
-                    class="text-4xl md:text-6xl font-bold text-white text-center"
-                >
-                    {{ anime?.name }}
-                </h1>
             </div>
         </div>
 
@@ -28,24 +22,24 @@
             <div v-if="seasons.length" class="mb-8">
                 <h2 class="text-2xl font-bold mb-4">Saisons</h2>
                 <div
-                    class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4"
+                    class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4"
                 >
                     <NuxtLink
                         v-for="season in seasons"
                         :key="season.id"
                         :to="`/anime/${anime?.id}/season/${season.id}`"
-                        class="relative aspect-w-16 aspect-h-9 rounded-lg overflow-hidden cursor-pointer group"
+                        class="relative aspect-w-16 aspect-h-9 rounded-lg overflow-hidden cursor-pointer season-card"
                     >
                         <img
                             :src="anime?.image_url"
                             :alt="anime?.name"
-                            class="w-full h-full object-cover transition-transform duration-300 group-hover:scale-110"
+                            class="w-full h-full object-cover season-image"
                         />
                         <div
                             class="absolute inset-x-0 bottom-0 p-2 flex flex-col items-start"
                         >
                             <span
-                                class="bg-blue-500 text-white text-sm px-3 py-1 rounded-full font-semibold"
+                                class="dark-badge backdrop-blur-md text-white text-sm px-3 py-1 rounded-full font-semibold"
                             >
                                 {{ season.name }}
                             </span>
@@ -94,23 +88,28 @@ const fetchAnime = async () => {
     }
 
     anime.value = data;
-    console.log(anime.value);
     await fetchSeasons();
 };
 
 const fetchSeasons = async () => {
+    if (!anime.value?.id) return;
+
     const { data, error } = await supabase
         .from("seasons")
         .select("*")
-        .eq("anime_id", anime.value?.id)
-        .order("name");
+        .eq("anime_id", anime.value.id)
+        .order("name", { ascending: true });
 
     if (error) {
         console.error("Erreur lors de la récupération des saisons:", error);
         return;
     }
 
-    seasons.value = data;
+    seasons.value = (data as Season[]).sort((a, b) => {
+        const aNum = parseInt(a.name.replace(/\D/g, ""));
+        const bNum = parseInt(b.name.replace(/\D/g, ""));
+        return aNum - bNum;
+    });
 };
 
 onMounted(async () => {
@@ -132,5 +131,18 @@ onMounted(async () => {
     right: 0;
     bottom: 0;
     left: 0;
+}
+
+.season-card .season-image {
+    transition: all 0.3s ease-in-out;
+}
+
+.season-card:hover .season-image {
+    transform: scale(1.1);
+    filter: brightness(60%);
+}
+
+.dark-badge {
+    background-color: rgba(0, 0, 0, 0.5);
 }
 </style>
