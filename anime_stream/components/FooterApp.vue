@@ -26,8 +26,8 @@
                             sur différents hébergeurs publiques et connus.
                         </p>
                         <p class="text-sm text-gray-600 dark:text-gray-300">
-                            Design inspiré de FRAnime.fr (Aucune affiliation
-                            directe avec Anime Stream)
+                            Images provenant de anime-sama.fr (Aucune
+                            affiliation directe avec Anime Stream)
                         </p>
                         <p class="text-base text-gray-800 dark:text-gray-100">
                             © {{ new Date().getFullYear() }} Anime Stream - Tous

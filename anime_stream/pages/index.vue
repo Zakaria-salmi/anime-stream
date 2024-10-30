@@ -47,7 +47,7 @@
                                             {{ item.name }}
                                         </h3>
                                         <UButton
-                                            to="/catalogue?sort=latest"
+                                            :to="`/anime/${item.name}`"
                                             color="primary"
                                             >Voir plus</UButton
                                         >
@@ -79,19 +79,33 @@
 
         <section class="mb-12">
             <h2 class="text-2xl font-bold mb-4">Animés populaires</h2>
-            <div
-                class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6"
-            >
-                <AnimeCard
-                    v-for="anime in popularAnimes"
-                    :key="anime.id"
-                    :anime="anime"
-                />
-            </div>
-            <div class="mt-4 text-center">
-                <UButton to="/catalogue?sort=popular" color="primary"
-                    >Voir plus</UButton
+            <div class="relative">
+                <div
+                    ref="scrollContainer"
+                    class="flex space-x-6 w-full overflow-x-auto whitespace-nowrap overflow-hidden pr-4 py-4 scrollbar-hide"
                 >
+                    <NuxtLink
+                        v-for="anime in popularAnimes"
+                        :key="anime.id"
+                        :to="`/anime/${anime.name}`"
+                        class="transition-transform duration-300 hover:scale-105 flex-shrink-0 w-64"
+                    >
+                        <AnimeCard :anime="anime" />
+                    </NuxtLink>
+                </div>
+
+                <button
+                    @click="handleScrollLeft"
+                    class="hidden sm:flex absolute top-1/2 left-2 transform -translate-y-1/2 bg-black bg-opacity-70 text-white p-3 rounded-full w-10 h-10 items-center justify-center"
+                >
+                    <Icon name="heroicons:chevron-left" class="w-6 h-6" />
+                </button>
+                <button
+                    @click="handleScrollRight"
+                    class="hidden sm:flex absolute top-1/2 right-2 transform -translate-y-1/2 bg-black bg-opacity-70 text-white p-3 rounded-full w-10 h-10 items-center justify-center"
+                >
+                    <Icon name="heroicons:chevron-right" class="w-6 h-6" />
+                </button>
             </div>
         </section>
 
@@ -100,11 +114,14 @@
             <div
                 class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6"
             >
-                <AnimeCard
+                <NuxtLink
                     v-for="anime in latestReleases"
                     :key="anime.id"
-                    :anime="anime"
-                />
+                    :to="`/anime/${anime.name}`"
+                    class="transition-transform duration-300 hover:scale-105"
+                >
+                    <AnimeCard :anime="anime" />
+                </NuxtLink>
             </div>
             <div class="mt-4 text-center">
                 <UButton to="/catalogue?sort=latest" color="primary"
@@ -150,7 +167,7 @@ const prevSlide = () => {
         carouselItems.value.length;
 };
 
-const popularAnimeIds = [
+const mustSeeAnimeIds = [
     "c0f34461-9759-47ab-82fc-0d5b915359e5",
     "d61c1768-9caf-468c-b056-360bcbfb3661",
     "0eb62ea3-7181-4ded-ace7-4ae9e3568a34",
@@ -162,7 +179,7 @@ const fetchCarouselAnimes = async () => {
     const { data, error } = await supabase
         .from("animes")
         .select("*")
-        .in("id", popularAnimeIds);
+        .in("id", mustSeeAnimeIds);
 
     if (error)
         console.error(
@@ -172,8 +189,23 @@ const fetchCarouselAnimes = async () => {
     else carouselItems.value = data;
 };
 
+const popularAnimeIds = [
+    "7a5b5f5f-893b-4d91-834e-7f0cb060f69d",
+    "5518047a-6640-4c11-b62a-0586b28200de",
+    "9837990f-6358-45ea-ad70-2852d16251a7",
+    "a8d2e192-1407-446d-8808-de6e6dd572ee",
+    "a85a0bd9-fda3-4d43-b2f1-901690110a28",
+    "2fd305a1-36b3-45d8-a480-a37726a9a3c9",
+    "ed7fec31-3ae7-4640-b1b2-9f403e2be6df",
+    "7f84ede1-26d5-4926-ba43-99e222957b9b",
+];
+
 const fetchPopularAnimes = async () => {
-    const { data, error } = await supabase.from("animes").select("*").limit(8);
+    const { data, error } = await supabase
+        .from("animes")
+        .select("*")
+        .in("id", popularAnimeIds)
+        .limit(8);
 
     if (error)
         console.error(
@@ -184,7 +216,11 @@ const fetchPopularAnimes = async () => {
 };
 
 const fetchLatestReleases = async () => {
-    const { data, error } = await supabase.from("animes").select("*").limit(8);
+    const { data, error } = await supabase
+        .from("animes")
+        .select("*")
+        .order("created_at", { ascending: false })
+        .limit(8);
 
     if (error)
         console.error(
@@ -231,6 +267,76 @@ const endDrag = (event: MouseEvent | TouchEvent) => {
     dragOffset.value = 0;
 };
 
+const scrollContainer = ref<HTMLElement | null>(null);
+
+const handleScrollLeft = () => {
+    if (!scrollContainer.value) return;
+
+    const isAtStart = scrollContainer.value.scrollLeft <= 0;
+    if (isAtStart) {
+        const targetScroll = scrollContainer.value.scrollWidth;
+        const duration = 500;
+        const startScroll = scrollContainer.value.scrollLeft;
+        const startTime = performance.now();
+
+        const animateScroll = (currentTime: number) => {
+            const elapsed = currentTime - startTime;
+            const progress = Math.min(elapsed / duration, 1);
+
+            const easeProgress = 1 - Math.pow(1 - progress, 3);
+
+            scrollContainer.value!.scrollLeft =
+                startScroll + (targetScroll - startScroll) * easeProgress;
+
+            if (progress < 1) {
+                requestAnimationFrame(animateScroll);
+            }
+        };
+
+        requestAnimationFrame(animateScroll);
+    } else {
+        scrollContainer.value.scrollBy({
+            left: -300,
+            behavior: "smooth",
+        });
+    }
+};
+
+const handleScrollRight = () => {
+    if (!scrollContainer.value) return;
+
+    const isAtEnd =
+        Math.ceil(
+            scrollContainer.value.scrollLeft + scrollContainer.value.clientWidth
+        ) >= scrollContainer.value.scrollWidth;
+    if (isAtEnd) {
+        const startScroll = scrollContainer.value.scrollLeft;
+        const duration = 500;
+        const startTime = performance.now();
+
+        const animateScroll = (currentTime: number) => {
+            const elapsed = currentTime - startTime;
+            const progress = Math.min(elapsed / duration, 1);
+
+            const easeProgress = 1 - Math.pow(1 - progress, 3);
+
+            scrollContainer.value!.scrollLeft =
+                startScroll * (1 - easeProgress);
+
+            if (progress < 1) {
+                requestAnimationFrame(animateScroll);
+            }
+        };
+
+        requestAnimationFrame(animateScroll);
+    } else {
+        scrollContainer.value.scrollBy({
+            left: 300,
+            behavior: "smooth",
+        });
+    }
+};
+
 onMounted(() => {
     fetchPopularAnimes();
     fetchLatestReleases();
@@ -245,5 +351,14 @@ onMounted(() => {
 
 .cursor-grab:active {
     cursor: grabbing;
+}
+
+.scrollbar-hide {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+}
+
+.scrollbar-hide::-webkit-scrollbar {
+    display: none;
 }
 </style>

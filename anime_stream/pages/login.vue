@@ -1,5 +1,5 @@
 <template>
-    <div class="h-screen flex items-center justify-center overlay">
+    <div class="flex items-center justify-center overlay mt-16 sm:mt-0">
         <UCard
             class="w-full max-w-sm bg-white/75 dark:bg-white/5 backdrop-blur-md"
         >
@@ -11,62 +11,37 @@
                     />
                     <h1 class="text-2xl font-bold">Bienvenue</h1>
                     <p class="text-gray-500 dark:text-gray-400 mt-1">
-                        Vous n'avez pas de compte ?
-                        <NuxtLink to="/signup" class="text-primary font-medium"
-                            >S'inscrire</NuxtLink
-                        >
+                        Connectez-vous avec votre compte préféré
                     </p>
                 </div>
             </template>
 
-            <div class="space-y-6">
+            <div class="space-y-4">
                 <UButton
                     color="gray"
                     variant="outline"
                     class="w-full"
-                    @click="signInWithGitHub"
+                    :loading="loading"
+                    @click="signInWithGoogle"
                 >
-                    <UIcon name="i-simple-icons-github" class="mr-2" />
-                    Continuer avec GitHub
+                    <UIcon name="i-simple-icons-google" class="mr-2" />
+                    Continuer avec Google
                 </UButton>
 
-                <UDivider label="ou" />
+                <UButton
+                    color="indigo"
+                    variant="outline"
+                    class="w-full"
+                    :loading="loading"
+                    @click="signInWithDiscord"
+                >
+                    <UIcon name="i-simple-icons-discord" class="mr-2" />
+                    Continuer avec Discord
+                </UButton>
 
-                <form @submit.prevent="handleSubmit" class="space-y-4">
-                    <UFormGroup label="Email">
-                        <UInput
-                            v-model="email"
-                            type="email"
-                            placeholder="Entrez votre email"
-                        />
-                    </UFormGroup>
-
-                    <UFormGroup label="Mot de passe">
-                        <UInput
-                            v-model="password"
-                            type="password"
-                            placeholder="Entrez votre mot de passe"
-                        />
-                        <template #help>
-                            <div class="flex justify-end">
-                                <NuxtLink
-                                    to="/forgot-password"
-                                    class="text-sm text-primary"
-                                >
-                                    Mot de passe oublié ?
-                                </NuxtLink>
-                            </div>
-                        </template>
-                    </UFormGroup>
-
-                    <UButton type="submit" color="primary" class="w-full">
-                        Continuer
-                        <UIcon
-                            name="i-heroicons-arrow-right-20-solid"
-                            class="ml-2"
-                        />
-                    </UButton>
-                </form>
+                <p v-if="errorMessage" class="text-red-500 mt-4 text-center">
+                    {{ errorMessage }}
+                </p>
             </div>
 
             <template #footer>
@@ -82,20 +57,58 @@
 </template>
 
 <script setup lang="ts">
-const email = ref("");
-const password = ref("");
+import { ref } from "vue";
 
-const handleSubmit = () => {
-    // Logique de connexion à implémenter
-    console.log("Connexion avec:", {
-        email: email.value,
-        password: password.value,
-    });
+const supabase = useSupabaseClient();
+const errorMessage = ref("");
+const loading = ref(false);
+
+const signInWithGoogle = async () => {
+    try {
+        loading.value = true;
+        errorMessage.value = "";
+
+        const { error } = await supabase.auth.signInWithOAuth({
+            provider: "google",
+            options: {
+                redirectTo: `${window.location.origin}/`,
+            },
+        });
+
+        if (error) {
+            errorMessage.value = "Erreur lors de la connexion avec Google";
+            console.error("Erreur de connexion avec Google:", error.message);
+        }
+    } catch (e) {
+        errorMessage.value = "Une erreur est survenue lors de la connexion";
+        console.error(e);
+    } finally {
+        loading.value = false;
+    }
 };
 
-const signInWithGitHub = () => {
-    // Logique de connexion avec GitHub à implémenter
-    console.log("Connexion avec GitHub");
+const signInWithDiscord = async () => {
+    try {
+        loading.value = true;
+        errorMessage.value = "";
+
+        const { error } = await supabase.auth.signInWithOAuth({
+            provider: "discord",
+            options: {
+                redirectTo: `${window.location.origin}/`,
+            },
+        });
+
+        if (error) {
+            errorMessage.value = "Erreur lors de la connexion avec Discord";
+            console.error("Erreur de connexion avec Discord:", error.message);
+        }
+    } catch (e) {
+        errorMessage.value = "Une erreur est survenue lors de la connexion";
+        console.error(e);
+    } finally {
+        loading.value = false;
+    }
 };
 </script>
 

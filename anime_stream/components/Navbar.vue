@@ -5,7 +5,6 @@
         <div
             class="mx-auto px-4 sm:px-6 lg:px-8 max-w-7xl flex items-center justify-between gap-3 h-16"
         >
-            <!-- Logo et titre -->
             <div class="lg:flex-1 flex items-center gap-1.5">
                 <NuxtLink
                     to="/"
@@ -20,7 +19,6 @@
                 </NuxtLink>
             </div>
 
-            <!-- Navigation links -->
             <ul
                 class="items-center ring-1 ring-gray-200 dark:ring-gray-800 px-3 gap-x-0 rounded-full hidden lg:flex"
             >
@@ -43,19 +41,65 @@
                 </li>
             </ul>
 
-            <!-- Right side buttons -->
-            <div class="flex items-center justify-end lg:flex-1 gap-1.5">
+            <div class="flex items-center justify-end lg:flex-1 gap-3">
                 <UButton
+                    v-if="!user"
                     color="gray"
                     variant="ghost"
-                    label="Connexion"
                     to="/login"
-                    class="hidden lg:flex"
+                    class="flex items-center"
                 >
                     Connexion
                     <UIcon name="i-heroicons-arrow-right-20-solid" />
                 </UButton>
-                <ThemeToggle />
+
+                <UDropdown
+                    v-else
+                    :items="dropdownItems"
+                    :ui="{
+                        container:
+                            'min-w-[280px] max-w-[calc(100vw-2rem)] sm:max-w-[400px]',
+                        item: {
+                            disabled: 'cursor-text select-text',
+                        },
+                    }"
+                    :popper="{
+                        placement: 'bottom-end',
+                        strategy: 'fixed',
+                    }"
+                    class="flex"
+                >
+                    <UAvatar
+                        :src="user?.user_metadata?.avatar_url"
+                        :alt="user?.user_metadata?.full_name"
+                        size="md"
+                    />
+
+                    <template #account="{ item }">
+                        <div class="text-left p-2 w-full">
+                            <p class="text-sm text-gray-500 dark:text-gray-400">
+                                Connecté en tant que
+                            </p>
+                            <p
+                                class="font-medium text-gray-900 dark:text-white break-words"
+                            >
+                                {{ item.label }}
+                            </p>
+                        </div>
+                    </template>
+
+                    <template #item="{ item }">
+                        <span class="truncate dark:text-gray-200">{{
+                            item.label
+                        }}</span>
+                        <UIcon
+                            :name="item.icon"
+                            class="flex-shrink-0 h-6 w-6 text-gray-400 dark:text-gray-200 ms-auto"
+                        />
+                    </template>
+                </UDropdown>
+
+                <ThemeToggle class="ml-2" />
                 <UButton
                     color="gray"
                     variant="ghost"
@@ -66,7 +110,6 @@
             </div>
         </div>
 
-        <!-- Mobile menu (hidden by default) -->
         <div v-if="mobileMenuOpen" class="lg:hidden">
             <div class="px-2 pt-2 pb-3 space-y-1">
                 <UButton
@@ -86,10 +129,13 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from "vue";
-import { useRoute } from "vue-router";
+import { ref, computed } from "vue";
+import { useRoute, useRouter } from "vue-router";
 
 const route = useRoute();
+const router = useRouter();
+const supabase = useSupabaseClient();
+const user = useSupabaseUser();
 const mobileMenuOpen = ref(false);
 
 const navItems = [
@@ -98,7 +144,68 @@ const navItems = [
     { label: "À propos", to: "/about" },
 ];
 
+const dropdownItems = computed(() => [
+    [
+        {
+            label: formatEmail(
+                user.value?.user_metadata?.email || user.value?.email
+            ),
+            slot: "account",
+            disabled: true,
+        },
+    ],
+    [
+        {
+            label: "Historique",
+            icon: "i-heroicons-clock",
+            to: "/history",
+        },
+    ],
+    [
+        {
+            label: "Ma Liste",
+            icon: "i-heroicons-heart",
+            to: "/my-list",
+        },
+    ],
+    [
+        {
+            label: "Déconnexion",
+            icon: "i-heroicons-arrow-left-on-rectangle",
+            click: handleLogout,
+        },
+    ],
+]);
+
+const handleLogout = async () => {
+    try {
+        const { error } = await supabase.auth.signOut();
+        if (error) throw error;
+        await router.push("/");
+    } catch (error) {
+        console.error("Erreur lors de la déconnexion:", error);
+    }
+};
+
 const toggleMobileMenu = () => {
     mobileMenuOpen.value = !mobileMenuOpen.value;
 };
+
+const formatEmail = (email: string) => {
+    if (!email) return "";
+    if (email.length > 35) {
+        const [username, domain] = email.split("@");
+        if (username.length > 20) {
+            return `${username.slice(0, 20)}...@${domain}`;
+        }
+    }
+    return email;
+};
 </script>
+
+<style scoped>
+.break-words {
+    word-break: break-word;
+    overflow-wrap: break-word;
+}
+</style>

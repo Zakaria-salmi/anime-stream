@@ -12,11 +12,25 @@
         <h1 class="text-3xl font-bold mb-4">
             {{ seasonName }}
         </h1>
-        <div v-if="!loading" class="flex flex-col space-x-4">
+        <div v-if="loading" class="container mx-auto px-4 py-8 mb-8 rounded-lg">
+            <div class="flex flex-row items-center space-x-4 mb-4">
+                <div
+                    class="h-10 w-48 bg-gray-200 dark:bg-gray-700 animate-pulse rounded"
+                ></div>
+                <div
+                    class="h-10 w-48 bg-gray-200 dark:bg-gray-700 animate-pulse rounded"
+                ></div>
+            </div>
+            <div
+                class="w-full h-[600px] bg-gray-200 dark:bg-gray-700 animate-pulse rounded-lg"
+            ></div>
+        </div>
+        <div v-else class="flex flex-col space-y-4">
             <div class="flex flex-row items-center space-x-4">
                 <USelectMenu
                     searchable
                     id="episodeSelect"
+                    v-model="selectedEpisode"
                     :options="episodeOptions"
                     class="mb-4 lg:w-48"
                 >
@@ -24,21 +38,22 @@
                 <USelectMenu
                     searchable
                     id="playerSelect"
+                    v-model="selectedPlayer"
                     :options="playersOptions"
                     class="mb-4 lg:w-48"
                 >
                 </USelectMenu>
             </div>
-        </div>
-        <div class="mt-4">
-            <iframe
-                :src="selectedPlayerUrl"
-                width="100%"
-                height="600px"
-                frameborder="0"
-                class="rounded-lg mb-4"
-                allowfullscreen
-            ></iframe>
+            <div class="mt-4">
+                <iframe
+                    :src="selectedPlayerUrl"
+                    width="100%"
+                    height="600px"
+                    frameborder="0"
+                    class="rounded-lg mb-4"
+                    allowfullscreen
+                ></iframe>
+            </div>
         </div>
         <div class="flex flex-row items-center justify-end space-x-4 mb-24">
             <UButton @click="previousEpisode"> Précédent </UButton>
@@ -70,13 +85,18 @@ interface Player {
 const episodes = ref<Episode[]>([]);
 const selectedEpisode = ref<Episode | null>(null);
 const selectedPlayer = ref<Player | null>(null);
+const selectedPlayerUrl = ref("");
 const loading = ref(true);
 
 const episodeOptions = computed(() =>
     episodes.value
-        .map((ep) => ({ label: ep.episode_number, value: ep.id }))
+        .map((ep) => ({
+            ...ep,
+            label: ep.episode_number,
+            value: ep.id,
+        }))
         .sort((a, b) => {
-            return a.label.localeCompare(b.label, "fr", {
+            return a.episode_number.localeCompare(b.episode_number, "fr", {
                 numeric: true,
                 sensitivity: "base",
             });
@@ -87,14 +107,12 @@ const playersOptions = computed(() =>
     (selectedEpisode.value?.players || [])
         .map((p) => ({
             label: p.name,
-            value: p.id,
+            src: p.src,
         }))
         .sort((a, b) =>
             a.label.localeCompare(b.label, "fr", { sensitivity: "base" })
         )
 );
-
-const selectedPlayerUrl = computed(() => selectedPlayer.value?.src || "");
 
 const supabase = useSupabaseClient();
 
@@ -136,8 +154,12 @@ async function fetchEpisodes() {
 
         episodes.value = episodesData || [];
         if (episodes.value.length > 0) {
-            selectedEpisode.value = episodes.value[0];
-            selectedPlayer.value = selectedEpisode.value.players[0];
+            selectedEpisode.value = episodeOptions.value[0];
+            selectedPlayer.value =
+                selectedEpisode.value.players.find(
+                    (p) => p.name === "Lecteur 1"
+                ) || null;
+            selectedPlayerUrl.value = selectedPlayer.value?.src || "";
         }
     } catch (error) {
         console.error("Erreur lors de la récupération des données:", error);
@@ -146,36 +168,33 @@ async function fetchEpisodes() {
     }
 }
 
-function updateSelectedEpisode(episodeId: number) {
-    selectedEpisode.value =
-        episodes.value.find((ep) => ep.id === episodeId) || null;
-    if (selectedEpisode.value) {
-        selectedPlayer.value = selectedEpisode.value.players[0];
-    }
-}
-
-function updateSelectedPlayer(playerId: number) {
-    selectedPlayer.value =
-        selectedEpisode.value?.players.find((p) => p.id === playerId) || null;
-}
-
 function previousEpisode() {
-    const currentIndex = episodes.value.findIndex(
+    const currentIndex = episodeOptions.value.findIndex(
         (ep) => ep.id === selectedEpisode.value?.id
     );
     if (currentIndex > 0) {
-        updateSelectedEpisode(episodes.value[currentIndex - 1].id);
+        selectedEpisode.value = episodeOptions.value[currentIndex - 1];
     }
 }
 
 function nextEpisode() {
-    const currentIndex = episodes.value.findIndex(
+    const currentIndex = episodeOptions.value.findIndex(
         (ep) => ep.id === selectedEpisode.value?.id
     );
-    if (currentIndex < episodes.value.length - 1) {
-        updateSelectedEpisode(episodes.value[currentIndex + 1].id);
+    if (currentIndex < episodeOptions.value.length - 1) {
+        selectedEpisode.value = episodeOptions.value[currentIndex + 1];
     }
 }
 
 onMounted(fetchEpisodes);
+
+watch(selectedEpisode, (newEpisode) => {
+    selectedPlayer.value = newEpisode?.players[0] || null;
+    selectedPlayer.value = playersOptions.value[0] || null;
+    selectedPlayerUrl.value = selectedPlayer.value?.src || "";
+});
+
+watch(selectedPlayer, (newPlayer) => {
+    selectedPlayerUrl.value = newPlayer?.src || "";
+});
 </script>

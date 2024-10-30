@@ -9,20 +9,22 @@
             ></div>
         </div>
 
-        <div v-else class="container mx-auto px-4 py-8 mb-8 rounded-lg">
-            <NuxtLink
-                :to="`/catalogue`"
-                class="mb-4 inline-block"
-                v-if="!$route.params.seasonName"
-            >
-                <UButton
-                    icon="i-heroicons-arrow-left-20-solid"
-                    variant="soft"
-                    class="light:bg-gray-500 dark:bg-gray-700"
+        <div v-else class="container mx-auto px-4 py-8 mb-5 rounded-lg">
+            <div class="flex justify-between items-center mb-4">
+                <NuxtLink
+                    :to="`/catalogue`"
+                    class="inline-block"
+                    v-if="!$route.params.seasonName"
                 >
-                    Retour au catalogue
-                </UButton>
-            </NuxtLink>
+                    <UButton
+                        icon="i-heroicons-arrow-left-20-solid"
+                        variant="soft"
+                        class="light:bg-gray-500 dark:bg-gray-700"
+                    >
+                        Retour au catalogue
+                    </UButton>
+                </NuxtLink>
+            </div>
 
             <h1 class="text-4xl font-bold text-start mb-4">
                 {{ anime?.name }}
@@ -37,6 +39,33 @@
         </div>
 
         <div class="container mx-auto px-4">
+            <div class="mb-8 flex" v-if="!$route.params.seasonName">
+                <UButton
+                    color="primary"
+                    :variant="isFavorite ? 'solid' : 'soft'"
+                    class="transition-all duration-300"
+                    @click="toggleFavorite"
+                >
+                    <template #leading>
+                        <UIcon
+                            :name="
+                                isFavorite
+                                    ? 'i-heroicons-heart-solid'
+                                    : 'i-heroicons-heart'
+                            "
+                            class="h-5 w-5"
+                        />
+                    </template>
+                    <span>
+                        {{
+                            isFavorite
+                                ? "Retirer des favoris"
+                                : "Ajouter aux favoris"
+                        }}
+                    </span>
+                </UButton>
+            </div>
+
             <NuxtPage v-if="$route.params.seasonName" />
             <div v-else>
                 <div v-if="loading" class="mb-8">
@@ -91,6 +120,7 @@ import { useRoute } from "vue-router";
 
 const route = useRoute();
 const supabase = useSupabaseClient();
+const user = useSupabaseUser();
 
 interface Anime {
     id: string;
@@ -109,6 +139,53 @@ const anime = ref<Anime | null>(null);
 const seasons = ref<Season[]>([]);
 const animeName = ref(route.params.name);
 const loading = ref(true);
+const isFavorite = ref(false);
+
+const checkFavoriteStatus = async () => {
+    if (!user.value || !anime.value?.id || route.path === "/") return;
+
+    const { data, error } = await supabase
+        .from("user_favorites")
+        .select("*")
+        .eq("user_id", user.value?.id)
+        .eq("anime_id", anime.value?.id);
+
+    if (error) {
+        console.error("Erreur lors de la récupération des favoris:", error);
+        return;
+    }
+
+    isFavorite.value = data.length > 0;
+};
+
+const toggleFavorite = async () => {
+    if (!user.value || !anime.value) {
+        return navigateTo("/login");
+    }
+
+    try {
+        if (isFavorite.value) {
+            const { error } = await supabase
+                .from("user_favorites")
+                .delete()
+                .eq("user_id", user.value.id)
+                .eq("anime_id", anime.value.id);
+
+            if (error) throw error;
+        } else {
+            const { error } = await supabase.from("user_favorites").insert({
+                user_id: user.value.id,
+                anime_id: anime.value.id,
+            });
+
+            if (error) throw error;
+        }
+
+        isFavorite.value = !isFavorite.value;
+    } catch (error) {
+        console.error("Erreur lors de la modification des favoris:", error);
+    }
+};
 
 const fetchAnime = async () => {
     loading.value = true;
@@ -125,7 +202,8 @@ const fetchAnime = async () => {
     }
 
     anime.value = data;
-    await fetchSeasons();
+    await Promise.all([fetchSeasons(), checkFavoriteStatus()]);
+    loading.value = false;
 };
 
 const fetchSeasons = async () => {
