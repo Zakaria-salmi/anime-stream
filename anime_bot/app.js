@@ -202,6 +202,7 @@ async function insertAnimeData(animeData) {
                 .from("animes")
                 .upsert({
                     name: animeData.animeName,
+                    url: animeData.url,
                     image_url: animeData.img,
                 })
                 .select()
