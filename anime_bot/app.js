@@ -330,12 +330,17 @@ async function scrapeAnime() {
     try {
         browser = await puppeteer.launch({
             headless: true,
+            ignoreHTTPSErrors: true,
             timeout: 6000000,
             protocolTimeout: 6000000,
             args: [
+                "--disable-infobars",
                 "--no-sandbox",
                 "--disable-setuid-sandbox",
-                "--disable-features=site-per-process",
+                "--disable-gpu=False",
+                "--enable-webgl",
+                "--window-size=1600,900",
+                "--start-maximized",
             ],
         });
         const page = await browser.newPage();
@@ -391,7 +396,7 @@ async function scrapeAnime() {
                     })
                 );
 
-                await delay(5000);
+                await delay(2000);
 
                 if (global.gc) {
                     global.gc();

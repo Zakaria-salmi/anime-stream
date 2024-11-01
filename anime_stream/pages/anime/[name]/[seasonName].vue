@@ -70,6 +70,8 @@ const route = useRoute();
 const animeName = route.params.name as string;
 const seasonName = route.params.seasonName as string;
 
+const user = useSupabaseUser();
+
 interface Episode {
     id: number;
     episode_number: string;
@@ -87,6 +89,8 @@ const selectedEpisode = ref<Episode | null>(null);
 const selectedPlayer = ref<Player | null>(null);
 const selectedPlayerUrl = ref("");
 const loading = ref(true);
+const animeData = ref<{ id: number } | null>(null);
+const seasonData = ref<{ id: number } | null>(null);
 
 const episodeOptions = computed(() =>
     episodes.value
@@ -119,22 +123,24 @@ const supabase = useSupabaseClient();
 async function fetchEpisodes() {
     loading.value = true;
     try {
-        const { data: animeData, error: animeError } = await supabase
+        const { data: anime, error: animeError } = await supabase
             .from("animes")
             .select("id")
             .eq("name", animeName)
             .single();
 
         if (animeError) throw animeError;
+        animeData.value = anime;
 
-        const { data: seasonData, error: seasonError } = await supabase
+        const { data: season, error: seasonError } = await supabase
             .from("seasons")
             .select("id")
-            .eq("anime_id", animeData.id)
+            .eq("anime_id", anime.id)
             .eq("name", seasonName)
             .single();
 
         if (seasonError) throw seasonError;
+        seasonData.value = season;
 
         const { data: episodesData, error: episodesError } = await supabase
             .from("episodes")
@@ -148,7 +154,7 @@ async function fetchEpisodes() {
                 )
             `
             )
-            .eq("season_id", seasonData.id);
+            .eq("season_id", season.id);
 
         if (episodesError) throw episodesError;
 
@@ -186,12 +192,40 @@ function nextEpisode() {
     }
 }
 
+async function addToHistory(episodeId: number) {
+    if (!user.value || !animeData.value || !seasonData.value) return;
+
+    const { data: existingEntry } = await supabase
+        .from("viewing_history")
+        .select()
+        .eq("user_id", user.value.id)
+        .eq("episode_id", episodeId)
+        .single();
+
+    if (existingEntry) {
+        const { error } = await supabase
+            .from("viewing_history")
+            .update({ updated_at: new Date().toISOString() })
+            .eq("user_id", user.value.id)
+            .eq("episode_id", episodeId);
+    } else {
+        const { error } = await supabase.from("viewing_history").insert({
+            user_id: user.value.id,
+            anime_id: animeData.value.id,
+            season_id: seasonData.value.id,
+            episode_id: episodeId,
+        });
+    }
+}
+
 onMounted(fetchEpisodes);
 
 watch(selectedEpisode, (newEpisode) => {
     selectedPlayer.value = newEpisode?.players[0] || null;
     selectedPlayer.value = playersOptions.value[0] || null;
     selectedPlayerUrl.value = selectedPlayer.value?.src || "";
+
+    if (newEpisode) addToHistory(newEpisode.id);
 });
 
 watch(selectedPlayer, (newPlayer) => {
