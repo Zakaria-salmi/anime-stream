@@ -1,114 +1,152 @@
 # 🎬 Anime Stream
 
+<p align="center">
+  <img src="screenshots/screenshot1.png" alt="Page d'accueil" width="800"/>
+  <img src="screenshots/screenshot6.png" alt="Page d'accueil" width="800"/>
+</p>
+
 Une plateforme moderne de streaming d'anime développée avec Nuxt.js, offrant une expérience utilisateur fluide et intuitive.
 
-## ✨ Fonctionnalités
+## 📸 Aperçu
 
-### 📺 Streaming
+<div align="center">
+  <div style="display: flex; justify-content: space-between; margin-bottom: 20px;">
+    <img src="screenshots/screenshot3.png" alt="Lecteur vidéo" width="100%"/>
+    <img src="screenshots/screenshot4.png" alt="Catalogue" width="100%"/>
+  </div>
+  <div style="display: flex; justify-content: space-between;">
+    <img src="screenshots/screenshot1.png" alt="Accueil" width="100%"/>
+    <img src="screenshots/screenshot2.png" alt="Saisons" width="100%"/>
+  </div>
+</div>
 
--   Large bibliothèque d'animes disponibles
--   Multiples lecteurs disponibles pour chaque épisode
--   Mise à jour quotidienne des nouveaux épisodes
--   Interface de lecture épurée et responsive
+## ✨ Fonctionnalités Principales
 
-### 👤 Système d'Authentification
+<table>
+  <tr>
+    <td>
+      <h3>📺 Streaming</h3>
+      <ul>
+        <li>Vaste bibliothèque d'animes</li>
+        <li>Lecteurs multiples par épisode</li>
+        <li>Mises à jour quotidiennes</li>
+        <li>Interface épurée</li>
+      </ul>
+    </td>
+    <td>
+      <h3>👤 Authentification</h3>
+      <ul>
+        <li>Création de compte</li>
+        <li>Connexion sécurisée</li>
+        <li>Sessions persistantes</li>
+      </ul>
+    </td>
+  </tr>
+  <tr>
+    <td>
+      <h3>📋 Profil Utilisateur</h3>
+      <ul>
+        <li>Système de favoris</li>
+        <li>Historique de visionnage</li>
+        <li>Reprise de lecture</li>
+        <li>Suivi des animes</li>
+      </ul>
+    </td>
+    <td>
+      <h3>🎨 Interface</h3>
+      <ul>
+        <li>Design moderne</li>
+        <li>Navigation intuitive</li>
+        <li>Mode sombre/clair</li>
+        <li>100% responsive</li>
+      </ul>
+    </td>
+  </tr>
+</table>
 
--   Création de compte utilisateur
--   Connexion sécurisée via Supabase
--   Gestion des sessions utilisateur
-
-### 📋 Fonctionnalités Utilisateur
-
--   Système de favoris personnalisé
--   Historique de visionnage
--   Reprise de la lecture au dernier épisode visionné
--   Suivi des animes en cours
-
-### 🎨 Interface Utilisateur
-
--   Design moderne et intuitif
--   Navigation fluide entre les pages
--   Mode sombre/clair
--   Interface responsive (mobile, tablette, desktop)
-
-## 🛠 Technologies Utilisées
+## 🛠 Stack Technique
 
 ### Frontend
 
--   **Framework**: Nuxt.js 3 / Vue.js 3
--   **Langage**: TypeScript
--   **Styling**:
-    -   Tailwind CSS
-    -   UI Components personnalisés
--   **State Management**: Vue Composition API
+![Nuxt.js](https://img.shields.io/badge/Nuxt.js-00DC82?style=for-the-badge&logo=nuxt.js&logoColor=white)
+![Vue.js](https://img.shields.io/badge/Vue.js-4FC08D?style=for-the-badge&logo=vue.js&logoColor=white)
+![TypeScript](https://img.shields.io/badge/TypeScript-3178C6?style=for-the-badge&logo=typescript&logoColor=white)
+![Tailwind CSS](https://img.shields.io/badge/Tailwind_CSS-38B2AC?style=for-the-badge&logo=tailwind-css&logoColor=white)
 
 ### Backend
 
--   **Base de données**: Supabase
--   **Authentication**: Supabase Auth
--   **Storage**: Supabase Storage
+![Supabase](https://img.shields.io/badge/Supabase-3ECF8E?style=for-the-badge&logo=supabase&logoColor=white)
 
-### Bot de Mise à Jour
+### Bot
 
--   **Runtime**: Node.js
--   **Framework**: Express
--   **Automatisation**: Mise à jour quotidienne des contenus
+![Node.js](https://img.shields.io/badge/Node.js-339933?style=for-the-badge&logo=node.js&logoColor=white)
+![Express](https://img.shields.io/badge/Express-000000?style=for-the-badge&logo=express&logoColor=white)
 
 ## 🚀 Installation
 
-\`\`\`bash
+1. **Cloner le repository**
 
-# Cloner le repository
-
+```bash
 git clone https://github.com/Zakaria-salmi/anime-stream
+```
 
-# Installer les dépendances pour le bot
+2. **Installation du bot**
 
+```bash
 cd anime_bot
 npm install
+```
 
-# Installer les dépendances pour le frontend
+3. **Installation du frontend**
 
+```bash
 cd anime_stream
 npm install
+```
 
-# Variables d'environnement
+4. **Configuration des variables d'environnement**
 
-Créer un fichier .env et ajouter les variables d'environnement.
+```bash
+Dans le dossier anime_stream
+cp .env.example .env
+```
 
-# Lancer le serveur de développement
+5. **Lancer le développement**
 
+```bash
 npm run dev
-\`\`\`
+```
 
-## ⚙️ Configuration
+## ⚙️ Configuration Supabase
 
-### Variables d'Environnement Requises
+1. Créer un projet sur [Supabase](https://supabase.com)
+2. Configurer les tables suivantes :
+    - `animes`
+    - `episodes`
+    - `users`
+    - `favorites`
+    - `viewing_history`
+3. Ajouter les variables d'environnement :
 
-1. SUPABASE_URL=votre_url_supabase
-2. SUPABASE_KEY=votre_clé_supabase
+```env
+SUPABASE_URL=votre_url_supabase
+SUPABASE_KEY=votre_clé_supabase
+```
 
-### Configuration Supabase
+## 💡 Contribution
 
-1. Créer un projet sur Supabase
-2. Configurer les tables nécessaires (animes, episodes, users, etc.)
-3. Configurer l'authentification
-4. Ajouter les variables d'environnement
-
-## 📝 Contribution
-
-Les contributions sont les bienvenues ! N'hésitez pas à :
+Les contributions sont les bienvenues ! Suivez ces étapes :
 
 1. Fork le projet
-2. Créer une branche pour votre fonctionnalité
-3. Commit vos changements
-4. Push sur votre branche
-5. Ouvrir une Pull Request
+2. Créez votre branche (`git checkout -b feature/AmazingFeature`)
+3. Committez vos changements (`git commit -m 'Add some AmazingFeature'`)
+4. Push sur la branche (`git push origin feature/AmazingFeature`)
+5. Ouvrez une Pull Request
 
 ## 🤝 Contact
 
-Pour toute question ou suggestion, n'hésitez pas à ouvrir une issue ou à me contacter directement.
+Lien du projet: [https://github.com/Zakaria-salmi/anime-stream](https://github.com/Zakaria-salmi/anime-stream)
 
 ---
 
-Développé avec ❤️ par Salmi Zakaria
+<p align="center">Développé avec ❤️ par Salmi Zakaria</p>
