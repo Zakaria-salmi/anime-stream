@@ -11,12 +11,12 @@ Une plateforme moderne de streaming d'anime développée avec Nuxt.js, offrant u
 
 <div align="center">
   <div style="display: flex; justify-content: space-around; margin-bottom: 20px;">
-    <img src="screenshots/screenshot4.png" alt="Catalogue" width="350"/>
-    <img src="screenshots/screenshot3.png" alt="Lecteur vidéo" width="350"/>
+    <img src="screenshots/screenshot4.png" alt="Catalogue" width="400"/>
+    <img src="screenshots/screenshot3.png" alt="Lecteur vidéo" width="400"/>
   </div>
   <div style="display: flex; justify-content: space-around;">
-    <img src="screenshots/screenshot2.png" alt="Saisons" width="350"/>
-    <img src="screenshots/screenshot5.png" alt="Accueil" width="350"/>
+    <img src="screenshots/screenshot2.png" alt="Saisons" width="400"/>
+    <img src="screenshots/screenshot5.png" alt="Accueil" width="400"/>
   </div>
 </div>
 
