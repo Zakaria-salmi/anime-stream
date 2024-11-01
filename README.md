@@ -1,8 +1,8 @@
 # 🎬 Anime Stream
 
 <div align="center">
-  <img src="screenshots/screenshot1.png" alt="Page d'accueil" width="500"/>
-  <img src="screenshots/screenshot6.png" alt="Page d'accueil" width="500"/>
+  <img src="screenshots/screenshot1.png" alt="Page d'accueil" width="1000"/>
+  <img src="screenshots/screenshot6.png" alt="Page d'accueil" width="1000"/>
 </div>
 
 Une plateforme moderne de streaming d'anime développée avec Nuxt.js, offrant une expérience utilisateur fluide et intuitive.
@@ -22,7 +22,7 @@ Une plateforme moderne de streaming d'anime développée avec Nuxt.js, offrant u
 
 ## ✨ Fonctionnalités Principales
 
-<table>
+<table style="width: 100%;">
   <tr>
     <td>
       <h3>📺 Streaming</h3>
