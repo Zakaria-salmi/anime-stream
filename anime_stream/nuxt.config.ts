@@ -16,9 +16,4 @@ export default defineNuxtConfig({
     colorMode: {
         classSuffix: "",
     },
-    runtimeConfig: {
-        public: {
-            siteUrl: process.env.NUXT_PUBLIC_URL || "http://localhost:3000",
-        },
-    },
 });
