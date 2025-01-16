@@ -71,7 +71,7 @@ const signInWithGoogle = async () => {
         const { error } = await supabase.auth.signInWithOAuth({
             provider: "google",
             options: {
-                redirectTo: `${window.location.origin}/`,
+                redirectTo: `${process.env.NUXT_PUBLIC_SITE_URL}/callback`,
             },
         });
 
@@ -95,7 +95,7 @@ const signInWithDiscord = async () => {
         const { error } = await supabase.auth.signInWithOAuth({
             provider: "discord",
             options: {
-                redirectTo: `${window.location.origin}/`,
+                redirectTo: `${process.env.NUXT_PUBLIC_SITE_URL}/callback`,
             },
         });
 
