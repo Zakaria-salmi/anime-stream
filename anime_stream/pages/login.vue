@@ -62,6 +62,7 @@ import { ref } from "vue";
 const supabase = useSupabaseClient();
 const errorMessage = ref("");
 const loading = ref(false);
+const config = useRuntimeConfig();
 
 const signInWithGoogle = async () => {
     try {
@@ -71,7 +72,7 @@ const signInWithGoogle = async () => {
         const { error } = await supabase.auth.signInWithOAuth({
             provider: "google",
             options: {
-                redirectTo: `${process.env.NUXT_PUBLIC_SITE_URL}/callback`,
+                redirectTo: `${config.public.siteUrl}/callback`,
             },
         });
 
@@ -95,7 +96,7 @@ const signInWithDiscord = async () => {
         const { error } = await supabase.auth.signInWithOAuth({
             provider: "discord",
             options: {
-                redirectTo: `${process.env.NUXT_PUBLIC_SITE_URL}/callback`,
+                redirectTo: `${config.public.siteUrl}/callback`,
             },
         });
 
