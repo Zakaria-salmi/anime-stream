@@ -202,7 +202,6 @@ async function insertAnimeData(animeData) {
                 .from("animes")
                 .upsert({
                     name: animeData.animeName,
-                    url: animeData.url,
                     image_url: animeData.img,
                 })
                 .select()
@@ -224,16 +223,13 @@ async function insertAnimeData(animeData) {
             if (seasonError && seasonError.code !== "PGRST116")
                 throw seasonError;
 
-            if (
-                !existingSeason ||
-                existingSeason.url !== `${animeData.url}/${season.seasonName}`
-            ) {
+            if (!existingSeason) {
                 const { data: seasonData, error: upsertError } = await supabase
                     .from("seasons")
                     .upsert({
                         anime_id: existingAnime.id,
                         name: season.seasonName,
-                        url: `${animeData.url}/${season.seasonName}`,
+                        url: animeData.url + "/" + season.href,
                     })
                     .select()
                     .single();
